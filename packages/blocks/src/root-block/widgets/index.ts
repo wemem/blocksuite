@@ -34,6 +34,9 @@ export {
 export { AffineImageToolbarWidget } from './image-toolbar/index.js';
 export { AffineInnerModalWidget } from './inner-modal/inner-modal.js';
 export {
+  importHtml,
+  importMarkDown,
+  importNotion,
   // It's used in the AFFiNE!
   showImportModal,
 } from './linked-doc/import-doc/index.js';

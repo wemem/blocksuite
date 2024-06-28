@@ -1267,7 +1267,7 @@ export class HtmlAdapter extends BaseAdapter<Html> {
     return {
       type: 'page',
       meta: {
-        id: nanoid(),
+        id: payload.id ?? nanoid(),
         title: hastGetTextContent(titleAst, 'Untitled'),
         createDate: Date.now(),
         tags: [],

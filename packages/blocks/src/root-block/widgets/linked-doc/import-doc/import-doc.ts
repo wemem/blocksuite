@@ -38,7 +38,8 @@ const SHOW_LOADING_SIZE = 1024 * 200;
 export async function importMarkDown(
   collection: DocCollection,
   text: string,
-  fileName?: string
+  fileName?: string,
+  docId?: string
 ) {
   const fileNameMiddleware: JobMiddleware = ({ slots }) => {
     slots.beforeImport.on(payload => {
@@ -66,6 +67,7 @@ export async function importMarkDown(
   const mdAdapter = new MarkdownAdapter(job);
   const page = await mdAdapter.toDoc({
     file: text,
+    id: docId,
     assets: job.assetsManager,
   });
   return page.id;
