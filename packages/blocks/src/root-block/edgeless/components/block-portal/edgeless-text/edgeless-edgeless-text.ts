@@ -137,7 +137,7 @@ export class EdgelessBlockPortalEdgelessText extends EdgelessPortalBase<Edgeless
       this._resizeObserver.disconnect();
     });
 
-    this.disposables.addFromEvent(this._textContainer, 'click', e => {
+    disposables.addFromEvent(this._textContainer, 'click', e => {
       if (!this._editing) return;
 
       const containerRect = this._textContainer.getBoundingClientRect();
@@ -184,6 +184,12 @@ export class EdgelessBlockPortalEdgelessText extends EdgelessPortalBase<Edgeless
         ]);
       }
     });
+
+    disposables.addFromEvent(this._textContainer, 'focusout', () => {
+      if (!this._editing) return;
+
+      this.edgeless.selection.clear();
+    });
   }
 
   override render() {
@@ -194,7 +200,7 @@ export class EdgelessBlockPortalEdgelessText extends EdgelessPortalBase<Edgeless
     const containerStyle: StyleInfo = {
       transform: `rotate(${rotate}deg)`,
       transformOrigin: 'center',
-      padding: '10px',
+      padding: '5px 10px',
       border: `1px solid ${this._editing ? 'var(--affine—primary—color, #1e96eb)' : 'transparent'}`,
       borderRadius: '4px',
       boxSizing: 'border-box',
