@@ -37,7 +37,6 @@ export type FromSliceSnapshotResult<Target> = {
 };
 export type ToDocSnapshotPayload<Target> = {
   file: Target;
-  id?: string;
   assets?: AssetsManager;
 };
 export type ToBlockSnapshotPayload<Target> = {

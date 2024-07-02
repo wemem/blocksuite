@@ -39,7 +39,7 @@ export async function importMarkDown(
   collection: DocCollection,
   text: string,
   fileName?: string,
-  docId?: string
+  jobMiddleware?: JobMiddleware
 ) {
   const fileNameMiddleware: JobMiddleware = ({ slots }) => {
     slots.beforeImport.on(payload => {
@@ -60,14 +60,17 @@ export async function importMarkDown(
       };
     });
   };
+  const middlewares = [defaultImageProxyMiddleware, fileNameMiddleware];
+  if (jobMiddleware) {
+    middlewares.push(jobMiddleware);
+  }
   const job = new Job({
     collection,
-    middlewares: [defaultImageProxyMiddleware, fileNameMiddleware],
+    middlewares,
   });
   const mdAdapter = new MarkdownAdapter(job);
   const page = await mdAdapter.toDoc({
     file: text,
-    id: docId,
     assets: job.assetsManager,
   });
   return page.id;

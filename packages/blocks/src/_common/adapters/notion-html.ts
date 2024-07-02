@@ -1047,7 +1047,7 @@ export class NotionHtmlAdapter extends BaseAdapter<NotionHtml> {
     return {
       type: 'page',
       meta: {
-        id: payload.pageId ?? nanoid(),
+        id: nanoid(),
         title: hastGetTextContent(titleAst, 'Untitled'),
         createDate: Date.now(),
         tags: [],
