@@ -88,6 +88,9 @@ export class ImageBlockComponent extends BlockComponent<
   @state()
   accessor lastSourceId!: string;
 
+  @state()
+  accessor lastSourceUrl!: string;
+
   private _selectBlock() {
     const selectionManager = this.host.selection;
     const blockSelection = selectionManager.create('block', {
@@ -147,7 +150,7 @@ export class ImageBlockComponent extends BlockComponent<
       : { margin: '18px 0' };
 
     this.model.propsUpdated.on(({ key }) => {
-      if (key === 'sourceId') {
+      if (key === 'sourceId' || key === 'sourceUrl') {
         this.refreshData();
       }
     });

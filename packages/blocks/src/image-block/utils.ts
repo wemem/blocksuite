@@ -99,6 +99,19 @@ async function getImageBlob(model: ImageBlockModel) {
 
 export async function fetchImageBlob(block: ImageBlockComponent) {
   try {
+    if (block.model.sourceUrl && block.model.sourceUrl != block.lastSourceUrl) {
+      // const blob = await fetch(block.model.sourceUrl).then(res => res.blob());
+      // if (!blob) {
+      //   throw new Error('Image blob is missing!');
+      // }
+      block.loading = false;
+      // block.blob = blob;
+      block.blobUrl = block.model.sourceUrl;
+      block.lastSourceUrl = block.model.sourceUrl;
+      block.error = false;
+      console.log('block', block);
+      return;
+    }
     if (block.model.sourceId !== block.lastSourceId || !block.blobUrl) {
       block.loading = true;
       block.error = false;

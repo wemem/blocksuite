@@ -534,6 +534,7 @@ export class HtmlAdapter extends BaseAdapter<Html> {
               : '';
           if (imageURL) {
             let blobId = '';
+            let blobUrl = '';
             if (!fetchable(imageURL)) {
               assets.getAssets().forEach((_value, key) => {
                 const attachmentName = getAssetName(assets.getAssets(), key);
@@ -560,9 +561,16 @@ export class HtmlAdapter extends BaseAdapter<Html> {
                 const file = new File([await res.blob()], name, {
                   type: res.headers.get('Content-Type') ?? '',
                 });
-                blobId = await sha(await clonedRes.arrayBuffer());
-                assets?.getAssets().set(blobId, file);
-                await assets?.writeToBlob(blobId);
+                // Check if the file is an image
+                // 如果不是，说明抓取的图片不存在，或者被方爬机制拦截
+                // 此时直接使用原始链接，不进行上传，image-block 渲染时直接使用原始链接
+                if (file.type.includes('image')) {
+                  blobId = await sha(await clonedRes.arrayBuffer());
+                  assets?.getAssets().set(blobId, file);
+                  await assets?.writeToBlob(blobId);
+                } else {
+                  blobUrl = imageURL;
+                }
               } catch (_) {
                 break;
               }
@@ -575,6 +583,7 @@ export class HtmlAdapter extends BaseAdapter<Html> {
                   flavour: 'affine:image',
                   props: {
                     sourceId: blobId,
+                    sourceUrl: blobUrl,
                   },
                   children: [],
                 },

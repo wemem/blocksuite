@@ -701,6 +701,7 @@ export class MarkdownAdapter extends BaseAdapter<Markdown> {
         }
         case 'image': {
           let blobId = '';
+          let blobUrl = '';
           if (!assets) {
             break;
           }
@@ -731,9 +732,17 @@ export class MarkdownAdapter extends BaseAdapter<Markdown> {
                 type: res.headers.get('Content-Type') ?? '',
               }
             );
-            blobId = await sha(await clonedRes.arrayBuffer());
-            assets?.getAssets().set(blobId, file);
-            await assets?.writeToBlob(blobId);
+
+            // Check if the file is an image
+            // 如果不是，说明抓取的图片不存在，或者被方爬机制拦截
+            // 此时直接使用原始链接，不进行上传，image-block 渲染时直接使用原始链接
+            if (file.type.includes('image')) {
+              blobId = await sha(await clonedRes.arrayBuffer());
+              assets?.getAssets().set(blobId, file);
+              await assets?.writeToBlob(blobId);
+            } else {
+              blobUrl = o.node.url;
+            }
           }
           context
             .openNode(
@@ -743,6 +752,7 @@ export class MarkdownAdapter extends BaseAdapter<Markdown> {
                 flavour: 'affine:image',
                 props: {
                   sourceId: blobId,
+                  sourceUrl: blobUrl,
                 },
                 children: [],
               },
