@@ -1,7 +1,5 @@
-import '../buttons/tool-icon-button.js';
-
 import { WithDisposable } from '@blocksuite/block-std';
-import { css, html, LitElement } from 'lit';
+import { LitElement, css, html } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
 import { repeat } from 'lit/directives/repeat.js';
 import { styleMap } from 'lit/directives/style-map.js';
@@ -11,7 +9,8 @@ import {
   NoteNoShadowIcon,
   NoteShadowSampleIcon,
 } from '../../../../_common/icons/edgeless.js';
-import { getThemeMode } from '../../../../_common/utils/query.js';
+import { ThemeObserver } from '../../../../_common/theme/theme-observer.js';
+import '../buttons/tool-icon-button.js';
 
 const TOOLBAR_SHADOWS_LIGHT = [
   '',
@@ -70,17 +69,8 @@ export class EdgelessNoteShadowPanel extends WithDisposable(LitElement) {
     }
   `;
 
-  @property({ attribute: false })
-  accessor value!: string;
-
-  @property({ attribute: false })
-  accessor background!: string;
-
-  @property({ attribute: false })
-  accessor onSelect!: (value: string) => void;
-
   override render() {
-    const mode = getThemeMode();
+    const mode = ThemeObserver.mode;
     const SHADOWS =
       mode === 'dark' ? TOOLBAR_SHADOWS_DARK : TOOLBAR_SHADOWS_LIGHT;
     return repeat(
@@ -89,7 +79,9 @@ export class EdgelessNoteShadowPanel extends WithDisposable(LitElement) {
       (shadow, index) =>
         html`<style>
             .item-icon svg rect:first-of-type {
-              fill: var(${this.background});
+              fill: ${this.background.startsWith('--')
+                ? `var(${this.background})`
+                : this.background};
             }
           </style>
           <div
@@ -116,6 +108,15 @@ export class EdgelessNoteShadowPanel extends WithDisposable(LitElement) {
           </div>`
     );
   }
+
+  @property({ attribute: false })
+  accessor background!: string;
+
+  @property({ attribute: false })
+  accessor onSelect!: (value: string) => void;
+
+  @property({ attribute: false })
+  accessor value!: string;
 }
 
 declare global {

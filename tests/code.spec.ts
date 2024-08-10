@@ -1,16 +1,17 @@
 import type { Page } from '@playwright/test';
+
 import { expect } from '@playwright/test';
 
 import {
   copyByKeyboard,
   createCodeBlock,
   dragBetweenCoords,
-  dragBetweenIndices,
   enterPlaygroundRoom,
   focusRichText,
   focusRichTextEnd,
   getInlineSelectionIndex,
   getInlineSelectionText,
+  getPageSnapshot,
   initEmptyCodeBlockState,
   initEmptyParagraphState,
   pasteByKeyboard,
@@ -63,14 +64,14 @@ function getCodeBlock(page: Page) {
   const codeToolbar = page.locator('affine-code-toolbar');
 
   const copyButton = codeToolbar.getByTestId('copy-code');
-  const moreButton = codeToolbar.getByTestId('more-button');
+  const moreButton = codeToolbar.getByTestId('more');
   const captionButton = codeToolbar.getByTestId('caption');
 
-  const moreMenu = page.locator('more-popup-menu');
+  const moreMenu = page.locator('.more-popup-menu');
 
   const openMore = async () => {
     await moreButton.click();
-    const menu = page.locator('more-popup-menu');
+    const menu = page.locator('.more-popup-menu');
 
     const wrapButton = page.locator('.menu-item.wrap');
 
@@ -379,7 +380,6 @@ use fern::{
   await expect(locator).toBeHidden();
 });
 
-// FIXEME: wait for paste refactor in code block
 test('drag copy paste', async ({ page }) => {
   await enterPlaygroundRoom(page);
   await initEmptyCodeBlockState(page);
@@ -387,7 +387,7 @@ test('drag copy paste', async ({ page }) => {
 
   await type(page, 'use');
 
-  await dragBetweenIndices(page, [0, 0], [0, 3]);
+  await setSelection(page, 2, 0, 2, 3);
   await copyByKeyboard(page);
   await pressArrowLeft(page);
   await pasteByKeyboard(page);
@@ -417,8 +417,9 @@ test('keyboard selection and copy paste', async ({ page }) => {
   await assertRichTextInlineRange(page, 0, 3, 0);
 });
 
-// FIXME: this test failed in headless mode but passed in non-headless mode
-test.skip('use keyboard copy inside code block copy', async ({ page }) => {
+test.skip('use keyboard copy inside code block copy', async ({
+  page,
+}, testInfo) => {
   await enterPlaygroundRoom(page);
   await initEmptyCodeBlockState(page);
   await focusRichText(page);
@@ -434,40 +435,8 @@ test.skip('use keyboard copy inside code block copy', async ({ page }) => {
   await pressEnter(page);
   await pressEnter(page);
   await pasteByKeyboard(page);
-  await assertStoreMatchJSX(
-    page,
-    /*xml*/ `
-<affine:page>
-  <affine:note
-    prop:background="--affine-note-background-blue"
-    prop:displayMode="both"
-    prop:edgeless={
-      Object {
-        "style": Object {
-          "borderRadius": 0,
-          "borderSize": 4,
-          "borderStyle": "none",
-          "shadowType": "--affine-note-shadow-sticker",
-        },
-      }
-    }
-    prop:hidden={false}
-    prop:index="a0"
-  >
-    <affine:code
-      prop:caption=""
-      prop:language="Plain Text"
-      prop:text="use"
-      prop:wrap={false}
-    />
-    <affine:code
-      prop:caption=""
-      prop:language="Plain Text"
-      prop:text="use"
-      prop:wrap={false}
-    />
-  </affine:note>
-</affine:page>`
+  expect(await getPageSnapshot(page, true)).toMatchSnapshot(
+    `${testInfo.title}_pasted.json`
   );
 });
 
@@ -1046,28 +1015,6 @@ test('should open more menu and close on selecting', async ({ page }) => {
   await expect(moreMenu.menu).toBeHidden();
 });
 
-test('should code block works in read only mode', async ({ page }) => {
-  await enterPlaygroundRoom(page);
-  await initEmptyCodeBlockState(page);
-  await focusRichTextEnd(page);
-
-  await page.waitForTimeout(300);
-  await switchReadonly(page);
-
-  const codeBlockController = getCodeBlock(page);
-  const codeBlock = codeBlockController.codeBlock;
-  await codeBlock.hover();
-  await codeBlockController.clickLanguageButton();
-  await expect(codeBlockController.langList).toBeHidden();
-
-  await codeBlock.hover();
-  await expect(codeBlockController.codeToolbar).toBeVisible();
-  await codeBlockController.moreButton.click({ delay: 50 });
-
-  await expect(codeBlockController.copyButton).toBeVisible();
-  await expect(codeBlockController.moreMenu).toBeHidden();
-});
-
 test('should code block lang input supports alias', async ({ page }) => {
   await enterPlaygroundRoom(page);
   await initEmptyCodeBlockState(page);
@@ -1145,7 +1092,7 @@ test('auto scroll horizontally when typing', async ({ page }) => {
   }
 
   const richTextScrollLeft1 = await page.evaluate(() => {
-    const richText = document.querySelector('affine-code .inline-editor');
+    const richText = document.querySelector('affine-code rich-text');
     if (!richText) {
       throw new Error('Failed to get rich text');
     }
@@ -1158,7 +1105,7 @@ test('auto scroll horizontally when typing', async ({ page }) => {
   await type(page, 'aa');
 
   const richTextScrollLeft2 = await page.evaluate(() => {
-    const richText = document.querySelector('affine-code .inline-editor');
+    const richText = document.querySelector('affine-code rich-text');
     if (!richText) {
       throw new Error('Failed to get rich text');
     }
@@ -1188,4 +1135,47 @@ test('code hotkey should not effect in global', async ({ page }) => {
   await assertTitle(page, 'aaa');
   await assertBlockCount(page, 'paragraph', 0);
   await assertBlockCount(page, 'code', 1);
+});
+
+test.describe('readonly mode', () => {
+  test('should code block widget be disabled in read only mode', async ({
+    page,
+  }) => {
+    await enterPlaygroundRoom(page);
+    await initEmptyCodeBlockState(page);
+    await focusRichTextEnd(page);
+
+    await page.waitForTimeout(300);
+    await switchReadonly(page);
+
+    const codeBlockController = getCodeBlock(page);
+    const codeBlock = codeBlockController.codeBlock;
+    await codeBlock.hover();
+    await codeBlockController.clickLanguageButton();
+    await expect(codeBlockController.langList).toBeHidden();
+
+    await codeBlock.hover();
+    await expect(codeBlockController.codeToolbar).toBeVisible();
+    await expect(codeBlockController.moreButton).toHaveAttribute('disabled');
+
+    await expect(codeBlockController.copyButton).toBeVisible();
+    await expect(codeBlockController.moreMenu).toBeHidden();
+  });
+
+  test('should not be able to modify code block in readonly mode', async ({
+    page,
+  }) => {
+    await enterPlaygroundRoom(page);
+    await initEmptyCodeBlockState(page);
+    await focusRichText(page);
+
+    await type(page, 'const a = 10;');
+    await assertRichTexts(page, ['const a = 10;']);
+
+    await switchReadonly(page);
+    await pressBackspace(page, 3);
+    await pressTab(page, 3);
+    await pressEnter(page, 2);
+    await assertRichTexts(page, ['const a = 10;']);
+  });
 });

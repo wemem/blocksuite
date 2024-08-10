@@ -1,6 +1,7 @@
-import { expect, type Page } from '@playwright/test';
+import { type Page, expect } from '@playwright/test';
 
 import {
+  Shape,
   createShapeElement,
   edgelessCommonSetup,
   getFirstGroupId,
@@ -8,7 +9,6 @@ import {
   getSortedIds,
   initThreeOverlapFilledShapes,
   initThreeOverlapNotes,
-  Shape,
   shiftClickView,
   switchEditorMode,
   triggerComponentToolbarAction,
@@ -50,7 +50,11 @@ test.describe('reordering', () => {
       const groupId = await getFirstGroupId(page);
       const currentSortedIds = await getSortedIds(page);
 
-      expect(currentSortedIds).toEqual([groupId, ...sortedIds]);
+      expect(currentSortedIds).toEqual([
+        ...sortedIds.slice(2),
+        groupId,
+        ...sortedIds.slice(0, 2),
+      ]);
     });
 
     test('release from group', async ({ page }) => {
@@ -65,8 +69,9 @@ test.describe('reordering', () => {
       const releasedShapeId = sortedIds[0];
 
       expect(currentSortedIds).toEqual([
+        ...sortedIds.slice(2),
         groupId,
-        ...sortedIds.filter(id => id !== sortedIds[0]),
+        sortedIds[1],
         releasedShapeId,
       ]);
     });
@@ -277,7 +282,7 @@ test.describe('reordering', () => {
 
       // should be note0
       await page.mouse.click(120, 140);
-      await assertEdgelessSelectedRect(page, [100, 100, 448, 91]);
+      await assertEdgelessSelectedRect(page, [100, 100, 448, 92]);
 
       // bring note0 forward
       await triggerComponentToolbarAction(page, 'bringForward');
@@ -287,7 +292,7 @@ test.describe('reordering', () => {
 
       // should be rect0
       await page.mouse.click(150, 140);
-      await assertEdgelessSelectedRect(page, [100, 100, 448, 91]);
+      await assertEdgelessSelectedRect(page, [100, 100, 448, 92]);
     });
 
     test('send backward', async ({ page }) => {
@@ -298,7 +303,7 @@ test.describe('reordering', () => {
 
       // should be note2
       await page.mouse.click(180, 140);
-      await assertEdgelessSelectedRect(page, [160, 100, 448, 91]);
+      await assertEdgelessSelectedRect(page, [160, 100, 448, 92]);
 
       // bring note2 backward
       await triggerComponentToolbarAction(page, 'sendBackward');
@@ -308,7 +313,7 @@ test.describe('reordering', () => {
 
       // should be note1
       await page.mouse.click(180, 140);
-      await assertEdgelessSelectedRect(page, [130, 100, 448, 91]);
+      await assertEdgelessSelectedRect(page, [130, 100, 448, 92]);
     });
 
     test('send to back', async ({ page }) => {
@@ -319,7 +324,7 @@ test.describe('reordering', () => {
 
       // should be note2
       await page.mouse.click(180, 140);
-      await assertEdgelessSelectedRect(page, [160, 100, 448, 91]);
+      await assertEdgelessSelectedRect(page, [160, 100, 448, 92]);
 
       // bring note2 to back
       await triggerComponentToolbarAction(page, 'sendToBack');
@@ -329,7 +334,7 @@ test.describe('reordering', () => {
 
       // should be note1
       await page.mouse.click(180, 140);
-      await assertEdgelessSelectedRect(page, [130, 100, 448, 91]);
+      await assertEdgelessSelectedRect(page, [130, 100, 448, 92]);
 
       // send note1 to back
       await triggerComponentToolbarAction(page, 'sendToBack');
@@ -339,7 +344,7 @@ test.describe('reordering', () => {
 
       // should be note0
       await page.mouse.click(180, 140);
-      await assertEdgelessSelectedRect(page, [100, 100, 448, 91]);
+      await assertEdgelessSelectedRect(page, [100, 100, 448, 92]);
     });
 
     test('undo and redo', async ({ page }) => {
@@ -350,7 +355,7 @@ test.describe('reordering', () => {
 
       // should be note2
       await page.mouse.click(180, 140);
-      await assertEdgelessSelectedRect(page, [160, 100, 448, 91]);
+      await assertEdgelessSelectedRect(page, [160, 100, 448, 92]);
 
       await captureHistory(page);
 
@@ -362,7 +367,7 @@ test.describe('reordering', () => {
 
       // should be note1
       await page.mouse.click(180, 140);
-      await assertEdgelessSelectedRect(page, [130, 100, 448, 91]);
+      await assertEdgelessSelectedRect(page, [130, 100, 448, 92]);
 
       // undo
       await undoByKeyboard(page);
@@ -370,7 +375,7 @@ test.describe('reordering', () => {
       await page.mouse.click(50, 50);
       // should be note2
       await page.mouse.click(180, 140);
-      await assertEdgelessSelectedRect(page, [160, 100, 448, 91]);
+      await assertEdgelessSelectedRect(page, [160, 100, 448, 92]);
 
       // redo
       await redoByKeyboard(page);
@@ -378,7 +383,7 @@ test.describe('reordering', () => {
       await page.mouse.click(50, 50);
       // should be note1
       await page.mouse.click(180, 140);
-      await assertEdgelessSelectedRect(page, [130, 100, 448, 91]);
+      await assertEdgelessSelectedRect(page, [130, 100, 448, 92]);
     });
   });
 });

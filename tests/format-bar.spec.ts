@@ -10,6 +10,7 @@ import {
   focusTitle,
   getBoundingBox,
   getEditorHostLocator,
+  getPageSnapshot,
   getSelectionRect,
   initEmptyParagraphState,
   initImageState,
@@ -18,6 +19,7 @@ import {
   pressArrowDown,
   pressArrowUp,
   pressEnter,
+  pressEscape,
   pressTab,
   scrollToBottom,
   scrollToTop,
@@ -93,7 +95,7 @@ test('should format quick bar show when clicking drag handle', async ({
   if (!box) {
     throw new Error("formatBar doesn't exist");
   }
-  assertAlmostEqual(box.x, 222.5, 5);
+  assertAlmostEqual(box.x, 251, 5);
   assertAlmostEqual(box.y - dragHandleRect.y, -55.5, 5);
 });
 
@@ -585,9 +587,11 @@ test('should format quick bar be able to format text when select multiple line',
   );
 });
 
-test('should format quick bar be able to link text', async ({ page }) => {
+test('should format quick bar be able to link text', async ({
+  page,
+}, testInfo) => {
   await enterPlaygroundRoom(page);
-  const { noteId } = await initEmptyParagraphState(page);
+  await initEmptyParagraphState(page);
   await initThreeParagraphs(page);
   // drag only the `456` paragraph
   await dragBetweenIndices(page, [1, 0], [1, 3]);
@@ -602,46 +606,8 @@ test('should format quick bar be able to link text', async ({ page }) => {
   await type(page, 'https://www.example.com');
   await pressEnter(page);
 
-  await assertStoreMatchJSX(
-    page,
-    `
-<affine:note
-  prop:background="--affine-note-background-blue"
-  prop:displayMode="both"
-  prop:edgeless={
-    Object {
-      "style": Object {
-        "borderRadius": 0,
-        "borderSize": 4,
-        "borderStyle": "none",
-        "shadowType": "--affine-note-shadow-sticker",
-      },
-    }
-  }
-  prop:hidden={false}
-  prop:index="a0"
->
-  <affine:paragraph
-    prop:text="123"
-    prop:type="text"
-  />
-  <affine:paragraph
-    prop:text={
-      <>
-        <text
-          insert="456"
-          link="https://www.example.com"
-        />
-      </>
-    }
-    prop:type="text"
-  />
-  <affine:paragraph
-    prop:text="789"
-    prop:type="text"
-  />
-</affine:note>`,
-    noteId
+  expect(await getPageSnapshot(page, true)).toMatchSnapshot(
+    `${testInfo.title}_init.json`
   );
 
   // FIXME: remove this
@@ -652,47 +618,17 @@ test('should format quick bar be able to link text', async ({ page }) => {
   await linkBtn.click();
   await waitNextFrame(page);
   await expect(linkBtn).not.toHaveAttribute('active', '');
-  await assertStoreMatchJSX(
-    page,
-    `
-<affine:note
-  prop:background="--affine-note-background-blue"
-  prop:displayMode="both"
-  prop:edgeless={
-    Object {
-      "style": Object {
-        "borderRadius": 0,
-        "borderSize": 4,
-        "borderStyle": "none",
-        "shadowType": "--affine-note-shadow-sticker",
-      },
-    }
-  }
-  prop:hidden={false}
-  prop:index="a0"
->
-  <affine:paragraph
-    prop:text="123"
-    prop:type="text"
-  />
-  <affine:paragraph
-    prop:text="456"
-    prop:type="text"
-  />
-  <affine:paragraph
-    prop:text="789"
-    prop:type="text"
-  />
-</affine:note>`,
-    noteId
+
+  expect(await getPageSnapshot(page, true)).toMatchSnapshot(
+    `${testInfo.title}_finial.json`
   );
 });
 
 test('should format quick bar be able to change to heading paragraph type', async ({
   page,
-}) => {
+}, testInfo) => {
   await enterPlaygroundRoom(page);
-  const { noteId } = await initEmptyParagraphState(page);
+  await initEmptyParagraphState(page);
   await initThreeParagraphs(page);
   // drag only the `456` paragraph
   await dragBetweenIndices(page, [0, 0], [0, 3]);
@@ -703,140 +639,26 @@ test('should format quick bar be able to change to heading paragraph type', asyn
   await expect(h1Btn).toBeVisible();
   await h1Btn.click();
 
-  await assertStoreMatchJSX(
-    page,
-    `
-<affine:note
-  prop:background="--affine-note-background-blue"
-  prop:displayMode="both"
-  prop:edgeless={
-    Object {
-      "style": Object {
-        "borderRadius": 0,
-        "borderSize": 4,
-        "borderStyle": "none",
-        "shadowType": "--affine-note-shadow-sticker",
-      },
-    }
-  }
-  prop:hidden={false}
-  prop:index="a0"
->
-  <affine:paragraph
-    prop:text="123"
-    prop:type="h1"
-  />
-  <affine:paragraph
-    prop:text="456"
-    prop:type="text"
-  />
-  <affine:paragraph
-    prop:text="789"
-    prop:type="text"
-  />
-</affine:note>`,
-    noteId
+  expect(await getPageSnapshot(page, true)).toMatchSnapshot(
+    `${testInfo.title}_init.json`
   );
 
   await bulletedBtn.click();
   await openParagraphMenu();
-  await assertStoreMatchJSX(
-    page,
-    `
-<affine:note
-  prop:background="--affine-note-background-blue"
-  prop:displayMode="both"
-  prop:edgeless={
-    Object {
-      "style": Object {
-        "borderRadius": 0,
-        "borderSize": 4,
-        "borderStyle": "none",
-        "shadowType": "--affine-note-shadow-sticker",
-      },
-    }
-  }
-  prop:hidden={false}
-  prop:index="a0"
->
-  <affine:list
-    prop:checked={false}
-    prop:collapsed={false}
-    prop:text="123"
-    prop:type="bulleted"
-  />
-  <affine:paragraph
-    prop:text="456"
-    prop:type="text"
-  />
-  <affine:paragraph
-    prop:text="789"
-    prop:type="text"
-  />
-</affine:note>`,
-    noteId
+
+  expect(await getPageSnapshot(page, true)).toMatchSnapshot(
+    `${testInfo.title}_bulleted.json`
   );
 
   const { textBtn } = getFormatBar(page);
   await textBtn.click();
 
-  await assertStoreMatchJSX(
-    page,
-    `
-<affine:note
-  prop:background="--affine-note-background-blue"
-  prop:displayMode="both"
-  prop:edgeless={
-    Object {
-      "style": Object {
-        "borderRadius": 0,
-        "borderSize": 4,
-        "borderStyle": "none",
-        "shadowType": "--affine-note-shadow-sticker",
-      },
-    }
-  }
-  prop:hidden={false}
-  prop:index="a0"
->
-  <affine:paragraph
-    prop:text="123"
-    prop:type="text"
-  />
-  <affine:paragraph
-    prop:text="456"
-    prop:type="text"
-  />
-  <affine:paragraph
-    prop:text="789"
-    prop:type="text"
-  />
-</affine:note>`,
-    noteId
+  expect(await getPageSnapshot(page, true)).toMatchSnapshot(
+    `${testInfo.title}_finial.json`
   );
   await page.waitForTimeout(10);
   // The paragraph button should prevent selection after click
   await assertRichTextInlineRange(page, 0, 0, 3);
-});
-
-test('should format quick bar be able to copy', async ({ page }) => {
-  await enterPlaygroundRoom(page);
-  await initEmptyParagraphState(page);
-  await initThreeParagraphs(page);
-  // drag only the `456` paragraph
-  await dragBetweenIndices(page, [1, 0], [1, 3]);
-
-  const { copyBtn } = getFormatBar(page);
-  await expect(copyBtn).toBeVisible();
-  await assertRichTextInlineRange(page, 1, 0, 3);
-  await copyBtn.click();
-  await assertRichTextInlineRange(page, 1, 0, 3);
-
-  await focusRichText(page, 1);
-  await pasteByKeyboard(page);
-  await waitNextFrame(page);
-
-  await assertRichTexts(page, ['123', '456456', '789']);
 });
 
 test('should format quick bar show when double click text', async ({
@@ -996,7 +818,7 @@ test('should format quick bar work in single block selection', async ({
   const selectionRect = await blockSelections.boundingBox();
   assertExists(formatRect);
   assertExists(selectionRect);
-  assertAlmostEqual(formatRect.x - selectionRect.x, 118.5, 10);
+  assertAlmostEqual(formatRect.x - selectionRect.x, 147.5, 10);
   assertAlmostEqual(formatRect.y - selectionRect.y, 33, 10);
 
   const boldBtn = formatBar.getByTestId('bold');
@@ -1089,7 +911,7 @@ test('should format quick bar work in multiple block selection', async ({
   }
   const rect = await blockSelections.first().boundingBox();
   assertExists(rect);
-  assertAlmostEqual(box.x - rect.x, 118.5, 10);
+  assertAlmostEqual(box.x - rect.x, 147.5, 10);
   assertAlmostEqual(box.y - rect.y, 99, 10);
 
   await formatBarController.boldBtn.click();
@@ -1167,9 +989,9 @@ test('should format quick bar work in multiple block selection', async ({
 
 test('should format quick bar with block selection works when update block type', async ({
   page,
-}) => {
+}, testInfo) => {
   await enterPlaygroundRoom(page);
-  const { noteId } = await initEmptyParagraphState(page);
+  await initEmptyParagraphState(page);
   await initThreeParagraphs(page);
 
   await dragBetweenIndices(
@@ -1191,82 +1013,14 @@ test('should format quick bar with block selection works when update block type'
   await formatBarController.bulletedBtn.click();
   await expect(blockSelections).toHaveCount(3);
 
-  await assertStoreMatchJSX(
-    page,
-    `
-<affine:note
-  prop:background="--affine-note-background-blue"
-  prop:displayMode="both"
-  prop:edgeless={
-    Object {
-      "style": Object {
-        "borderRadius": 0,
-        "borderSize": 4,
-        "borderStyle": "none",
-        "shadowType": "--affine-note-shadow-sticker",
-      },
-    }
-  }
-  prop:hidden={false}
-  prop:index="a0"
->
-  <affine:list
-    prop:checked={false}
-    prop:collapsed={false}
-    prop:text="123"
-    prop:type="bulleted"
-  />
-  <affine:list
-    prop:checked={false}
-    prop:collapsed={false}
-    prop:text="456"
-    prop:type="bulleted"
-  />
-  <affine:list
-    prop:checked={false}
-    prop:collapsed={false}
-    prop:text="789"
-    prop:type="bulleted"
-  />
-</affine:note>`,
-    noteId
+  expect(await getPageSnapshot(page, true)).toMatchSnapshot(
+    `${testInfo.title}_init.json`
   );
 
   await expect(formatBarController.formatBar).toBeVisible();
   await formatBarController.h1Btn.click();
-  await assertStoreMatchJSX(
-    page,
-    `
-<affine:note
-  prop:background="--affine-note-background-blue"
-  prop:displayMode="both"
-  prop:edgeless={
-    Object {
-      "style": Object {
-        "borderRadius": 0,
-        "borderSize": 4,
-        "borderStyle": "none",
-        "shadowType": "--affine-note-shadow-sticker",
-      },
-    }
-  }
-  prop:hidden={false}
-  prop:index="a0"
->
-  <affine:paragraph
-    prop:text="123"
-    prop:type="h1"
-  />
-  <affine:paragraph
-    prop:text="456"
-    prop:type="h1"
-  />
-  <affine:paragraph
-    prop:text="789"
-    prop:type="h1"
-  />
-</affine:note>`,
-    noteId
+  expect(await getPageSnapshot(page, true)).toMatchSnapshot(
+    `${testInfo.title}_final.json`
   );
   await expect(formatBarController.formatBar).toBeVisible();
   await expect(blockSelections).toHaveCount(3);
@@ -1292,7 +1046,7 @@ test('should format quick bar show after convert to code block', async ({
     { x: 0, y: 0 }
   );
   await expect(formatBarController.formatBar).toBeVisible();
-  await formatBarController.assertBoundingBox(222.5, 343);
+  await formatBarController.assertBoundingBox(251, 343);
 
   await formatBarController.openParagraphMenu();
   await formatBarController.codeBlockBtn.click();
@@ -1649,4 +1403,63 @@ test('create linked doc from block selection with format bar', async ({
   </affine:note>
 </affine:page>`
   );
+});
+
+test.describe('more menu button', () => {
+  test('should be able to perform the copy action', async ({ page }) => {
+    await enterPlaygroundRoom(page);
+    await initEmptyParagraphState(page);
+    await initThreeParagraphs(page);
+    // drag only the `456` paragraph
+    await dragBetweenIndices(page, [1, 0], [1, 3]);
+
+    const { openMoreMenu, copyBtn } = getFormatBar(page);
+    await openMoreMenu();
+    await expect(copyBtn).toBeVisible();
+    await assertRichTextInlineRange(page, 1, 0, 3);
+    await copyBtn.click();
+    await assertRichTextInlineRange(page, 1, 0, 3);
+
+    await focusRichText(page, 1);
+    await pasteByKeyboard(page);
+    await waitNextFrame(page);
+
+    await assertRichTexts(page, ['123', '456456', '789']);
+  });
+
+  test('should be able to perform the duplicate action', async ({ page }) => {
+    await enterPlaygroundRoom(page);
+    await initEmptyParagraphState(page);
+    await initThreeParagraphs(page);
+
+    await focusRichText(page, 1);
+    await pressEscape(page);
+
+    const { openMoreMenu, duplicateBtn } = getFormatBar(page);
+    await openMoreMenu();
+    await expect(duplicateBtn).toBeVisible();
+    await duplicateBtn.click();
+
+    await waitNextFrame(page);
+
+    await assertRichTexts(page, ['123', '456', '456', '789']);
+  });
+
+  test('should be able to perform the delete action', async ({ page }) => {
+    await enterPlaygroundRoom(page);
+    await initEmptyParagraphState(page);
+    await initThreeParagraphs(page);
+
+    await focusRichText(page, 1);
+    await pressEscape(page);
+
+    const { openMoreMenu, deleteBtn } = getFormatBar(page);
+    await openMoreMenu();
+    await expect(deleteBtn).toBeVisible();
+    await deleteBtn.click();
+
+    await waitNextFrame(page);
+
+    await assertRichTexts(page, ['123', '789']);
+  });
 });

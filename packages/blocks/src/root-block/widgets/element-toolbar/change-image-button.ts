@@ -1,28 +1,28 @@
-import '../../edgeless/components/buttons/tool-icon-button.js';
-
 import { WithDisposable } from '@blocksuite/block-std';
-import { assertExists } from '@blocksuite/global/utils';
-import { html, LitElement, nothing } from 'lit';
+import { LitElement, html, nothing } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
 
-import { CaptionIcon } from '../../../_common/icons/text.js';
 import type { ImageBlockComponent } from '../../../image-block/image-block.js';
 import type { ImageBlockModel } from '../../../image-block/image-model.js';
 import type { EdgelessRootBlockComponent } from '../../edgeless/edgeless-root-block.js';
 
+import '../../../_common/components/toolbar/icon-button.js';
+import '../../../_common/components/toolbar/separator.js';
+import { CaptionIcon, DownloadIcon } from '../../../_common/icons/text.js';
+import { downloadImageBlob } from '../../../image-block/utils.js';
+
 @customElement('edgeless-change-image-button')
 export class EdgelessChangeImageButton extends WithDisposable(LitElement) {
-  @property({ attribute: false })
-  accessor model!: ImageBlockModel;
+  private _download = () => {
+    if (!this._blockComponent) return;
+    downloadImageBlob(this._blockComponent).catch(console.error);
+  };
 
-  @property({ attribute: false })
-  accessor edgeless!: EdgelessRootBlockComponent;
+  private _showCaption = () => {
+    this._blockComponent?.captionEditor?.show();
+  };
 
-  private get _doc() {
-    return this.model.doc;
-  }
-
-  private get _blockElement() {
+  private get _blockComponent() {
     const blockSelection =
       this.edgeless.service.selection.surfaceSelections.filter(sel =>
         sel.elements.includes(this.model.id)
@@ -31,31 +31,47 @@ export class EdgelessChangeImageButton extends WithDisposable(LitElement) {
       return;
     }
 
-    const blockElement = this.edgeless.std.view.getBlock(
+    const block = this.edgeless.std.view.getBlock(
       blockSelection[0].blockId
     ) as ImageBlockComponent | null;
-    assertExists(blockElement);
 
-    return blockElement;
+    return block;
   }
 
-  private _showCaption() {
-    this._blockElement?.captionEditor.show();
+  private get _doc() {
+    return this.model.doc;
   }
 
   override render() {
     return html`
-      <edgeless-tool-icon-button
+      <editor-icon-button
+        aria-label="Download"
+        .tooltip=${'Download'}
+        ?disabled=${this._doc.readonly}
+        @click=${this._download}
+      >
+        ${DownloadIcon}
+      </editor-icon-button>
+
+      <editor-toolbar-separator></editor-toolbar-separator>
+
+      <editor-icon-button
         aria-label="Add caption"
         .tooltip=${'Add caption'}
         class="change-image-button caption"
         ?disabled=${this._doc.readonly}
-        @click=${() => this._showCaption()}
+        @click=${this._showCaption}
       >
         ${CaptionIcon}
-      </edgeless-tool-icon-button>
+      </editor-icon-button>
     `;
   }
+
+  @property({ attribute: false })
+  accessor edgeless!: EdgelessRootBlockComponent;
+
+  @property({ attribute: false })
+  accessor model!: ImageBlockModel;
 }
 
 declare global {

@@ -3,7 +3,7 @@ import type { EmbedCardStyle } from './types.js';
 export const BLOCK_ID_ATTR = 'data-block-id';
 
 export const NOTE_WIDTH = 800;
-export const BLOCK_CHILDREN_CONTAINER_PADDING_LEFT = 26;
+export const BLOCK_CHILDREN_CONTAINER_PADDING_LEFT = 24;
 export const EDGELESS_BLOCK_CHILD_PADDING = 24;
 export const EDGELESS_BLOCK_CHILD_BORDER_WIDTH = 2;
 
@@ -56,7 +56,6 @@ export const DEFAULT_LINK_PREVIEW_ENDPOINT =
 
 // This constant is used to ignore tags when exporting using html2canvas
 export const CANVAS_EXPORT_IGNORE_TAGS = [
-  'AFFINE-BLOCK-HUB',
   'EDGELESS-TOOLBAR',
   'AFFINE-DRAG-HANDLE-WIDGET',
   'AFFINE-FORMAT-BAR-WIDGET',

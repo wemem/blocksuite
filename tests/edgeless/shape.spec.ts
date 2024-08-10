@@ -1,4 +1,4 @@
-import { expect, type Page } from '@playwright/test';
+import { type Page, expect } from '@playwright/test';
 
 import {
   assertEdgelessTool,
@@ -292,7 +292,7 @@ test('hovering on shape should not have effect on underlying block', async ({
 
   await switchEditorMode(page);
 
-  const block = page.locator('.edgeless-block-portal-note');
+  const block = page.locator('affine-edgeless-note');
   const blockBox = await block.boundingBox();
   if (blockBox === null) throw new Error('Unexpected box value: box is null');
 
@@ -678,5 +678,45 @@ test.describe('shape hit test', () => {
 
     await type(page, 'hello');
     await assertEdgelessCanvasText(page, 'hello');
+  });
+
+  test('should enter edit mode when double-clicking a text area in a shape with a transparent background', async ({
+    page,
+  }) => {
+    await addTransparentRect(page, rect.start, rect.end);
+    await page.mouse.click(rect.start.x - 20, rect.start.y - 20);
+    await assertEdgelessNonSelectedRect(page);
+
+    await assertEdgelessTool(page, 'default');
+    await page.mouse.dblclick(rect.start.x + 50, rect.start.y + 50);
+    await waitNextFrame(page);
+    await type(page, 'hello');
+
+    await pressEscape(page);
+    await waitNextFrame(page);
+
+    const textAlignBtn = locatorComponentToolbar(page).getByRole('button', {
+      name: 'Alignment',
+    });
+    await textAlignBtn.click();
+
+    await page
+      .locator('edgeless-align-panel')
+      .getByRole('button', { name: 'Left' })
+      .click();
+
+    // creates an edgeless-text
+    await page.mouse.dblclick(rect.start.x + 80, rect.start.y + 20);
+    await waitNextFrame(page);
+    await page.locator('edgeless-text-editor').isVisible();
+
+    await pressEscape(page);
+    await waitNextFrame(page);
+
+    // enters edit mode
+    await page.mouse.dblclick(rect.start.x + 20, rect.start.y + 50);
+    await page.locator('edgeless-shape-text-editor').isVisible();
+    await type(page, ' world');
+    await assertEdgelessCanvasText(page, 'hello world');
   });
 });

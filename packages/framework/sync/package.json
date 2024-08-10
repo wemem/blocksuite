@@ -1,12 +1,12 @@
 {
   "name": "@blocksuite/sync",
-  "version": "0.15.0",
+  "version": "0.16.0",
   "description": "BlockSuite data synchronization engine abstraction and implementation.",
   "type": "module",
   "repository": "toeverything/blocksuite",
   "scripts": {
     "build": "tsc",
-    "test:unit": "vitest --run",
+    "test:unit": "nx vite:test --run",
     "test": "pnpm test:unit"
   },
   "keywords": [],

@@ -1,6 +1,4 @@
 import type { Command, TextSelection } from '@blocksuite/block-std';
-import type { EditorHost } from '@blocksuite/block-std';
-import { assertExists } from '@blocksuite/global/utils';
 import type { Text } from '@blocksuite/store';
 
 import { matchFlavours } from '../../../_common/utils/index.js';
@@ -13,17 +11,11 @@ export const deleteTextCommand: Command<
   }
 > = (ctx, next) => {
   const textSelection = ctx.textSelection ?? ctx.currentTextSelection;
-  assertExists(
-    textSelection,
-    '`textSelection` is required, you need to pass it in args or use `getTextSelection` command before adding this command to the pipeline.'
-  );
+  if (!textSelection) return;
 
-  const host = ctx.std.host as EditorHost;
-  assertExists(host.rangeManager);
-
-  const range = host.rangeManager.textSelectionToRange(textSelection);
+  const range = ctx.std.range.textSelectionToRange(textSelection);
   if (!range) return;
-  const selectedElements = host.rangeManager.getSelectedBlockElementsByRange(
+  const selectedElements = ctx.std.range.getSelectedBlockComponentsByRange(
     range,
     {
       mode: 'flat',
@@ -33,7 +25,7 @@ export const deleteTextCommand: Command<
   const { from, to } = textSelection;
 
   const fromElement = selectedElements.find(el => from.blockId === el.blockId);
-  assertExists(fromElement);
+  if (!fromElement) return;
 
   let fromText: Text | undefined;
   if (matchFlavours(fromElement.model, ['affine:page'])) {
@@ -41,7 +33,7 @@ export const deleteTextCommand: Command<
   } else {
     fromText = fromElement.model.text;
   }
-  assertExists(fromText);
+  if (!fromText) return;
   if (!to) {
     fromText.delete(from.index, from.length);
     ctx.std.selection.setGroup('note', [
@@ -58,10 +50,10 @@ export const deleteTextCommand: Command<
   }
 
   const toElement = selectedElements.find(el => to.blockId === el.blockId);
-  assertExists(toElement);
+  if (!toElement) return;
 
   const toText = toElement.model.text;
-  assertExists(toText);
+  if (!toText) return;
 
   fromText.delete(from.index, from.length);
   toText.delete(0, to.length);

@@ -1,24 +1,26 @@
-import './components/column-stats.js';
-import './components/column-stats-cell.js';
-
 import { ShadowlessElement, WithDisposable } from '@blocksuite/block-std';
-import type { PropertyValues } from 'lit';
-import { css, html } from 'lit';
+import { SignalWatcher } from '@lit-labs/preact-signals';
+import { type PropertyValues, css, html } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
 import { repeat } from 'lit/directives/repeat.js';
 
+import type { GroupData } from '../../../common/group-by/helper.js';
+import type { DataViewRenderer } from '../../../data-view.js';
+import type { DataViewTable } from './table-view.js';
+import type { TableSingleView } from './table-view-manager.js';
+
 import { popFilterableSimpleMenu } from '../../../../../_common/components/index.js';
 import { GroupTitle } from '../../../common/group-by/group-title.js';
-import type { GroupData } from '../../../common/group-by/helper.js';
 import { PlusIcon } from '../../../common/icons/index.js';
-import type { DataViewRenderer } from '../../../data-view.js';
+import './components/column-stats.js';
+import './components/column-stats-cell.js';
 import { LEFT_TOOL_BAR_WIDTH } from './consts.js';
-import type { DataViewTable } from './table-view.js';
-import type { DataViewTableManager } from './table-view-manager.js';
+import { TableAreaSelection } from './types.js';
 
 const styles = css`
-  affine-data-view-table-group .group-header-op {
+  affine-data-view-table-group:hover .group-header-op {
     visibility: visible;
+    opacity: 1;
   }
   .data-view-table-group-add-row {
     display: flex;
@@ -53,40 +55,24 @@ const styles = css`
 `;
 
 @customElement('affine-data-view-table-group')
-export class TableGroup extends WithDisposable(ShadowlessElement) {
-  get rows() {
-    return this.group?.rows ?? this.view.rows;
-  }
-
-  static override styles = styles;
-
-  @property({ attribute: false })
-  accessor dataViewEle!: DataViewRenderer;
-
-  @property({ attribute: false })
-  accessor view!: DataViewTableManager;
-
-  @property({ attribute: false })
-  accessor viewEle!: DataViewTable;
-
-  @property({ attribute: false })
-  accessor group: GroupData | undefined = undefined;
-
+export class TableGroup extends SignalWatcher(
+  WithDisposable(ShadowlessElement)
+) {
   private clickAddRow = () => {
     this.view.rowAdd('end', this.group?.key);
     requestAnimationFrame(() => {
       const selectionController = this.viewEle.selectionController;
-      const index = this.view.columnManagerList.findIndex(
+      const index = this.view.columnManagerList$.value.findIndex(
         v => v.type === 'title'
       );
-      selectionController.selection = {
+      selectionController.selection = TableAreaSelection.create({
         groupKey: this.group?.key,
         focus: {
           rowIndex: this.rows.length - 1,
           columnIndex: index,
         },
         isEditing: true,
-      };
+      });
     });
   };
 
@@ -94,17 +80,17 @@ export class TableGroup extends WithDisposable(ShadowlessElement) {
     this.view.rowAdd('start', this.group?.key);
     requestAnimationFrame(() => {
       const selectionController = this.viewEle.selectionController;
-      const index = this.view.columnManagerList.findIndex(
+      const index = this.view.columnManagerList$.value.findIndex(
         v => v.type === 'title'
       );
-      selectionController.selection = {
+      selectionController.selection = TableAreaSelection.create({
         groupKey: this.group?.key,
         focus: {
           rowIndex: 0,
           columnIndex: index,
         },
         isEditing: true,
-      };
+      });
     });
   };
 
@@ -144,13 +130,15 @@ export class TableGroup extends WithDisposable(ShadowlessElement) {
         style="position: sticky;left: 0;width: max-content;padding: 6px 0;margin-bottom: 4px;display:flex;align-items:center;gap: 12px;max-width: 400px"
       >
         ${GroupTitle(this.group, {
-          readonly: this.view.readonly,
+          readonly: this.view.readonly$.value,
           clickAdd: this.clickAddRowInStart,
           clickOps: this.clickGroupOptions,
         })}
       </div>
     `;
   };
+
+  static override styles = styles;
 
   private renderRows(ids: string[]) {
     return html`
@@ -174,7 +162,7 @@ export class TableGroup extends WithDisposable(ShadowlessElement) {
           }
         )}
       </div>
-      ${this.view.readonly
+      ${this.view.readonly$.value
         ? null
         : html` <div
             class="data-view-table-group-add-row dv-hover"
@@ -188,7 +176,7 @@ export class TableGroup extends WithDisposable(ShadowlessElement) {
               ${PlusIcon}<span>New Record</span>
             </div>
           </div>`}
-      ${this.dataViewEle.config.getFlag?.('enable_database_statistics')
+      ${this.view.featureFlags$.value.enable_database_statistics
         ? html`
             <affine-database-column-stats
               .view="${this.view}"
@@ -200,6 +188,10 @@ export class TableGroup extends WithDisposable(ShadowlessElement) {
     `;
   }
 
+  override render() {
+    return this.renderRows(this.rows);
+  }
+
   protected override updated(_changedProperties: PropertyValues) {
     super.updated(_changedProperties);
     this.querySelectorAll('data-view-table-row').forEach(ele => {
@@ -207,9 +199,21 @@ export class TableGroup extends WithDisposable(ShadowlessElement) {
     });
   }
 
-  override render() {
-    return this.renderRows(this.rows);
+  get rows() {
+    return this.group?.rows ?? this.view.rows$.value;
   }
+
+  @property({ attribute: false })
+  accessor dataViewEle!: DataViewRenderer;
+
+  @property({ attribute: false })
+  accessor group: GroupData | undefined = undefined;
+
+  @property({ attribute: false })
+  accessor view!: TableSingleView;
+
+  @property({ attribute: false })
+  accessor viewEle!: DataViewTable;
 }
 
 declare global {

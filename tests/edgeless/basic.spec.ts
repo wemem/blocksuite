@@ -3,6 +3,8 @@ import { assertExists } from '@global/utils/index.js';
 import { expect } from '@playwright/test';
 
 import {
+  Shape,
+  ZOOM_BAR_RESPONSIVE_SCREEN_WIDTH,
   createShapeElement,
   decreaseZoomLevel,
   deleteAll,
@@ -10,11 +12,12 @@ import {
   getEdgelessSelectedRect,
   increaseZoomLevel,
   locatorEdgelessComponentToolButton,
+  multiTouchDown,
+  multiTouchMove,
+  multiTouchUp,
   optionMouseDrag,
-  Shape,
   shiftClickView,
   switchEditorMode,
-  ZOOM_BAR_RESPONSIVE_SCREEN_WIDTH,
   zoomByMouseWheel,
   zoomResetByKeyboard,
 } from '../utils/actions/edgeless.js';
@@ -55,7 +58,7 @@ test('switch to edgeless mode', async ({ page }) => {
   await assertRichTextInlineRange(page, 0, 5, 0);
 
   await switchEditorMode(page);
-  const locator = page.locator('edgeless-block-portal-container');
+  const locator = page.locator('affine-edgeless-root gfx-viewport');
   await expect(locator).toHaveCount(1);
   await assertRichTexts(page, ['hello']);
   await waitNextFrame(page);
@@ -71,10 +74,10 @@ test('can zoom viewport', async ({ page }) => {
   await switchEditorMode(page);
   await zoomResetByKeyboard(page);
 
-  await assertNoteXYWH(page, [0, 0, NOTE_WIDTH, 91]);
+  await assertNoteXYWH(page, [0, 0, NOTE_WIDTH, 92]);
 
   await page.mouse.click(CENTER_X, CENTER_Y);
-  const original = [80, 402.5, NOTE_WIDTH, 91];
+  const original = [80, 402.5, NOTE_WIDTH, 92];
   await assertEdgelessSelectedRect(page, original);
   await assertZoomLevel(page, 100);
 
@@ -102,17 +105,79 @@ test('zoom by mouse', async ({ page }) => {
   await zoomResetByKeyboard(page);
   await assertZoomLevel(page, 100);
 
-  await assertNoteXYWH(page, [0, 0, NOTE_WIDTH, 91]);
+  await assertNoteXYWH(page, [0, 0, NOTE_WIDTH, 92]);
 
   await page.mouse.click(CENTER_X, CENTER_Y);
-  const original = [80, 402.5, NOTE_WIDTH, 91];
+  const original = [80, 402.5, NOTE_WIDTH, 92];
   await assertEdgelessSelectedRect(page, original);
 
   await zoomByMouseWheel(page, 0, 125);
-  await assertZoomLevel(page, 75);
+  await assertZoomLevel(page, 90);
 
-  const zoomed = [172.5, 414.375, original[2] * 0.75, original[3] * 0.75];
+  const zoomed = [117, 407.25, original[2] * 0.9, original[3] * 0.9];
   await assertEdgelessSelectedRect(page, zoomed);
+});
+
+test('zoom by pinch', async ({ page }) => {
+  await enterPlaygroundRoom(page);
+  await initEmptyEdgelessState(page);
+
+  await switchEditorMode(page);
+  await zoomResetByKeyboard(page);
+  await assertZoomLevel(page, 100);
+
+  await assertNoteXYWH(page, [0, 0, NOTE_WIDTH, 92]);
+
+  await page.mouse.click(CENTER_X, CENTER_Y);
+  const original = [80, 402.5, NOTE_WIDTH, 92];
+  await assertEdgelessSelectedRect(page, original);
+
+  const from = [
+    { x: CENTER_X - 100, y: CENTER_Y },
+    { x: CENTER_X + 100, y: CENTER_Y },
+  ];
+  const to = [
+    { x: CENTER_X - 50, y: CENTER_Y },
+    { x: CENTER_X + 50, y: CENTER_Y },
+  ];
+  await multiTouchDown(page, from);
+  await multiTouchMove(page, from, to);
+  await multiTouchUp(page, to);
+
+  await assertZoomLevel(page, 50);
+  const zoomed = [265, 426.25, 0.5 * NOTE_WIDTH, 46];
+  await assertEdgelessSelectedRect(page, zoomed);
+});
+
+test('move by pan', async ({ page }) => {
+  await enterPlaygroundRoom(page);
+  await initEmptyEdgelessState(page);
+
+  await switchEditorMode(page);
+  await zoomResetByKeyboard(page);
+  await assertZoomLevel(page, 100);
+
+  await assertNoteXYWH(page, [0, 0, NOTE_WIDTH, 92]);
+
+  await page.mouse.click(CENTER_X, CENTER_Y);
+  const original = [80, 402.5, NOTE_WIDTH, 92];
+  await assertEdgelessSelectedRect(page, original);
+
+  const from = [
+    { x: CENTER_X - 100, y: CENTER_Y },
+    { x: CENTER_X + 100, y: CENTER_Y },
+  ];
+  const to = [
+    { x: CENTER_X - 50, y: CENTER_Y + 50 },
+    { x: CENTER_X + 150, y: CENTER_Y + 50 },
+  ];
+
+  await multiTouchDown(page, from);
+  await multiTouchMove(page, from, to);
+  await multiTouchUp(page, to);
+
+  const moved = [130, 452.5, NOTE_WIDTH, 92];
+  await assertEdgelessSelectedRect(page, moved);
 });
 
 test('option/alt mouse drag duplicate a new element', async ({ page }) => {

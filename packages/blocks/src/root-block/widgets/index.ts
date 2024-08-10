@@ -6,7 +6,6 @@ export {
   type AffineAIPanelState,
   type AffineAIPanelWidgetConfig,
 } from './ai-panel/type.js';
-export { BlockHubWidget } from './block-hub/block-hub.js';
 export { AffineCodeLanguageListWidget } from './code-language-list/index.js';
 export { AffineCodeToolbarWidget } from './code-toolbar/index.js';
 export { AffineDocRemoteSelectionWidget } from './doc-remote-selection/doc-remote-selection.js';
@@ -33,6 +32,7 @@ export {
 } from './format-bar/format-bar.js';
 export { AffineImageToolbarWidget } from './image-toolbar/index.js';
 export { AffineInnerModalWidget } from './inner-modal/inner-modal.js';
+export { LinkedWidgetUtils } from './linked-doc/config.js';
 export {
   importHtml,
   importMarkDown,
@@ -52,5 +52,6 @@ export {
   type AffineSlashMenuItemGenerator,
   AffineSlashMenuWidget,
   type AffineSlashSubMenu,
+  insertContent,
 } from './slash-menu/index.js';
 export { AffineSurfaceRefToolbar } from './surface-ref-toolbar/surface-ref-toolbar.js';

@@ -1,69 +1,78 @@
 import type { EditorHost } from '@blocksuite/block-std';
-import { assertExists, sleep } from '@blocksuite/global/utils';
-import type { InlineEditor } from '@blocksuite/inline';
+import type { InlineEditor, InlineRange } from '@blocksuite/inline';
+
 import { BlockModel } from '@blocksuite/store';
 import { css, unsafeCSS } from 'lit';
+
+import type { AffineInlineEditor } from '../inline/presets/affine-inline-specs.js';
 
 import { isControlledKeyboardEvent } from '../../_common/utils/event.js';
 import { getInlineEditorByModel } from '../../_common/utils/query.js';
 import { getCurrentNativeRange } from '../../_common/utils/selection.js';
-import type { AffineInlineEditor } from '../inline/presets/affine-inline-specs.js';
+
+export function getQuery(
+  inlineEditor: InlineEditor,
+  startRange: InlineRange | null
+) {
+  const nativeRange = getCurrentNativeRange();
+  if (!nativeRange) {
+    return null;
+  }
+  if (nativeRange.startContainer !== nativeRange.endContainer) {
+    console.warn(
+      'Failed to parse query! Current range is not collapsed.',
+      nativeRange
+    );
+    return null;
+  }
+  const textNode = nativeRange.startContainer;
+  if (textNode.nodeType !== Node.TEXT_NODE) {
+    console.warn(
+      'Failed to parse query! Current range is not a text node.',
+      nativeRange
+    );
+    return null;
+  }
+  const curRange = inlineEditor.getInlineRange();
+  if (!startRange || !curRange) {
+    return null;
+  }
+  if (curRange.index < startRange.index) {
+    return null;
+  }
+  const text = inlineEditor.yText.toString();
+  return text.slice(startRange.index, curRange.index);
+}
+
+interface ObserverParams {
+  target: HTMLElement;
+  signal: AbortSignal;
+  inlineEditor: InlineEditor;
+  onInput?: () => void;
+  onDelete?: () => void;
+  onMove?: (step: 1 | -1) => void;
+  onConfirm?: () => void;
+  onAbort?: () => void;
+  onPaste?: () => void;
+  interceptor?: (e: KeyboardEvent, next: () => void) => void;
+}
 
 export const createKeydownObserver = ({
   target,
+  signal,
   inlineEditor,
-  onUpdateQuery,
+  onInput,
+  onDelete,
   onMove,
   onConfirm,
-  onEsc,
+  onAbort,
+  onPaste,
   interceptor = (_, next) => next(),
-  abortController,
-}: {
-  target: HTMLElement;
-  inlineEditor: InlineEditor;
-  onUpdateQuery: (val: string) => void;
-  onMove: (step: 1 | -1) => void;
-  onConfirm: () => void;
-  onEsc?: () => void;
-  interceptor?: (e: KeyboardEvent, next: () => void) => void;
-  abortController: AbortController;
-}) => {
-  let query = '';
-  const startIndex = inlineEditor?.getInlineRange()?.index ?? 0;
-
-  const updateQuery = async () => {
-    // Wait for text update
-    await sleep(0);
-    const range = getCurrentNativeRange();
-    if (!range) {
-      abortController.abort();
-      return;
-    }
-    if (range.startContainer !== range.endContainer) {
-      console.warn(
-        'Failed to parse query! Current range is not collapsed.',
-        range
-      );
-      abortController.abort();
-      return;
-    }
-    const textNode = range.startContainer;
-    if (textNode.nodeType !== Node.TEXT_NODE) {
-      console.warn(
-        'Failed to parse query! Current range is not a text node.',
-        range
-      );
-      abortController.abort();
-      return;
-    }
-    const curIndex = inlineEditor.getInlineRange()?.index ?? 0;
-    const text = inlineEditor.yText.toString();
-    const previousQuery = query;
-    query = text.slice(startIndex, curIndex);
-
-    if (query !== previousQuery) {
-      onUpdateQuery(query);
-    }
+}: ObserverParams) => {
+  // In iOS webkit, using requestAnimationFrame has some timing issues
+  // we need wait inline editor updated before handle the next action
+  const waitForInlineEditorUpdated = (fn: () => void) => {
+    inlineEditor.slots.inlineRangeUpdate.once(fn);
   };
 
   const keyDownListener = (e: KeyboardEvent) => {
@@ -76,16 +85,21 @@ export const createKeydownObserver = ({
         switch (e.key) {
           // Previous command
           case 'p': {
-            onMove(-1);
+            onMove?.(-1);
             e.stopPropagation();
             e.preventDefault();
             return;
           }
           // Next command
           case 'n': {
-            onMove(1);
+            onMove?.(1);
             e.stopPropagation();
             e.preventDefault();
+            return;
+          }
+          // Paste command
+          case 'v': {
+            onPaste?.();
             return;
           }
         }
@@ -100,8 +114,8 @@ export const createKeydownObserver = ({
       }
 
       // Abort when press modifier key + any other key to avoid weird behavior
-      // e.g. press ctrl + a to select all or press ctrl + v to paste
-      abortController.abort();
+      // e.g. press ctrl + a to select all
+      onAbort?.();
       return;
     }
 
@@ -112,61 +126,58 @@ export const createKeydownObserver = ({
       (!isControlledKeyboardEvent(e) && e.key.length === 1) ||
       e.isComposing
     ) {
-      updateQuery().catch(console.error);
+      waitForInlineEditorUpdated(() => onInput?.());
       return;
     }
 
     switch (e.key) {
       case 'Escape': {
-        abortController.abort();
+        onAbort?.();
         return;
       }
       case 'Backspace': {
-        if (!query.length) {
-          abortController.abort();
-        }
-        updateQuery().catch(console.error);
+        waitForInlineEditorUpdated(() => onDelete?.());
         return;
       }
       case 'Enter': {
         if (e.shiftKey) {
-          abortController.abort();
+          onAbort?.();
           return;
         }
-        onConfirm();
+        onConfirm?.();
         e.preventDefault();
         return;
       }
       case 'Tab': {
         if (e.shiftKey) {
-          onMove(-1);
+          onMove?.(-1);
         } else {
-          onMove(1);
+          onMove?.(1);
         }
         e.preventDefault();
         return;
       }
       case 'ArrowUp': {
         if (e.shiftKey) {
-          abortController.abort();
+          onAbort?.();
           return;
         }
-        onMove(-1);
+        onMove?.(-1);
         e.preventDefault();
         return;
       }
       case 'ArrowDown': {
         if (e.shiftKey) {
-          abortController.abort();
+          onAbort?.();
           return;
         }
-        onMove(1);
+        onMove?.(1);
         e.preventDefault();
         return;
       }
       case 'ArrowLeft':
       case 'ArrowRight': {
-        abortController.abort();
+        onAbort?.();
         return;
       }
       default:
@@ -181,31 +192,23 @@ export const createKeydownObserver = ({
     {
       // Workaround: Use capture to prevent the event from triggering the keyboard bindings action
       capture: true,
-      signal: abortController.signal,
+      signal,
     }
+  );
+
+  // Fix paste input
+  target.addEventListener(
+    'paste',
+    () => waitForInlineEditorUpdated(() => onInput?.()),
+    { signal }
   );
 
   // Fix composition input
   target.addEventListener(
     'input',
-    () => {
-      updateQuery().catch(console.error);
-    },
-    {
-      signal: abortController.signal,
-    }
+    () => waitForInlineEditorUpdated(() => onInput?.()),
+    { signal }
   );
-
-  if (onEsc) {
-    const escListener = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onEsc();
-      }
-    };
-    window.addEventListener('keydown', escListener, {
-      signal: abortController.signal,
-    });
-  }
 };
 
 /**
@@ -224,10 +227,13 @@ export function cleanSpecifiedTail(
     inlineEditorOrModel instanceof BlockModel
       ? getInlineEditorByModel(editorHost, inlineEditorOrModel)
       : inlineEditorOrModel;
-  assertExists(inlineEditor, 'Inline editor not found');
-
+  if (!inlineEditor) {
+    return;
+  }
   const inlineRange = inlineEditor.getInlineRange();
-  assertExists(inlineRange);
+  if (!inlineRange) {
+    return;
+  }
   const idx = inlineRange.index - str.length;
   const textStr = inlineEditor.yText.toString().slice(idx, idx + str.length);
   if (textStr !== str) {
@@ -247,18 +253,18 @@ export function cleanSpecifiedTail(
  * You should add a container before the scrollbar style to prevent the style pollution of the whole doc.
  */
 export const scrollbarStyle = (container: string) => {
-  if (!container)
-    throw new Error(
+  if (!container) {
+    console.error(
       'To prevent style pollution of the whole doc, you must add a container before the scrollbar style.'
     );
+    return css``;
+  }
 
   // sanitize container name
-  if (
-    container.length > 50 ||
-    container.includes('{') ||
-    container.includes('}')
-  )
-    throw new Error('Invalid container name!');
+  if (container.includes('{') || container.includes('}')) {
+    console.error('Invalid container name! Please use a valid CSS selector.');
+    return css``;
+  }
 
   return css`
     ${unsafeCSS(container)} {

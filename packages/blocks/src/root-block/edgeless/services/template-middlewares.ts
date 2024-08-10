@@ -1,11 +1,13 @@
-import { assertExists, assertType } from '@blocksuite/global/utils';
 import type { BlockSnapshot, SnapshotReturn } from '@blocksuite/store';
 
+import { Bound } from '@blocksuite/global/utils';
+import { assertExists, assertType } from '@blocksuite/global/utils';
+
 import type { ConnectorElementModel } from '../../../surface-block/index.js';
-import { Bound } from '../../../surface-block/utils/bound.js';
+import type { SlotBlockPayload, TemplateJob } from './template.js';
+
 import { generateElementId } from '../../../surface-block/utils/index.js';
 import { sortIndex } from '../../../surface-block/utils/sort.js';
-import type { SlotBlockPayload, TemplateJob } from './template.js';
 
 export const replaceIdMiddleware = (job: TemplateJob) => {
   const regeneratedIdMap = new Map<string, string>();
@@ -31,7 +33,7 @@ export const replaceIdMiddleware = (job: TemplateJob) => {
     blockJson.id = newId;
 
     data.parent = data.parent
-      ? regeneratedIdMap.get(data.parent) ?? data.parent
+      ? (regeneratedIdMap.get(data.parent) ?? data.parent)
       : undefined;
 
     if (blockJson.flavour === 'affine:surface-ref') {
@@ -58,7 +60,7 @@ export const replaceIdMiddleware = (job: TemplateJob) => {
         val.id = newId;
         elements[newId] = val;
 
-        if (['group', 'connector'].includes(val['type'] as string)) {
+        if (['connector', 'group'].includes(val['type'] as string)) {
           defered.push(newId);
         }
       });

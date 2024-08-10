@@ -1,7 +1,8 @@
 import type { UIEventHandler } from '@blocksuite/block-std';
-import type { BlockElement } from '@blocksuite/block-std';
-import { assertExists, DisposableGroup } from '@blocksuite/global/utils';
+import type { BlockComponent } from '@blocksuite/block-std';
 import type { BlockSnapshot, Doc } from '@blocksuite/store';
+
+import { DisposableGroup, assertExists } from '@blocksuite/global/utils';
 
 import {
   AttachmentAdapter,
@@ -18,25 +19,16 @@ import { ClipboardAdapter } from './adapter.js';
 import { copyMiddleware, pasteMiddleware } from './middlewares/index.js';
 
 export class PageClipboard {
-  private get _std() {
-    return this.host.std;
-  }
-
-  protected _disposables = new DisposableGroup();
-
-  host: BlockElement;
-
-  constructor(host: BlockElement) {
-    this.host = host;
-  }
-
   private _copySelected = (onCopy?: () => void) => {
     return this._std.command
       .chain()
       .with({ onCopy })
       .getSelectedModels()
+      .draftSelectedModels()
       .copySelectedModels();
   };
+
+  protected _disposables = new DisposableGroup();
 
   protected _init = () => {
     this._std.clipboard.registerAdapter(
@@ -88,19 +80,22 @@ export class PageClipboard {
     });
   };
 
-  hostConnected() {
-    if (this._disposables.disposed) {
-      this._disposables = new DisposableGroup();
-    }
-    this.host.handleEvent('copy', this.onPageCopy);
-    this.host.handleEvent('paste', this.onPagePaste);
-    this.host.handleEvent('cut', this.onPageCut);
-    this._init();
-  }
+  host: BlockComponent;
 
-  hostDisconnected() {
-    this._disposables.dispose();
-  }
+  onBlockSnapshotPaste = async (
+    snapshot: BlockSnapshot,
+    doc: Doc,
+    parent?: string,
+    index?: number
+  ) => {
+    const block = await this._std.clipboard.pasteBlockSnapshot(
+      snapshot,
+      doc,
+      parent,
+      index
+    );
+    return block?.id ?? null;
+  };
 
   onPageCopy: UIEventHandler = ctx => {
     const e = ctx.get('clipboardState').raw;
@@ -134,18 +129,33 @@ export class PageClipboard {
       .try(cmd => [
         cmd.getTextSelection().inline<'currentSelectionPath'>((ctx, next) => {
           const textSelection = ctx.currentTextSelection;
-          assertExists(textSelection);
+          if (!textSelection) {
+            return;
+          }
           const end = textSelection.to ?? textSelection.from;
           next({ currentSelectionPath: end.blockId });
         }),
         cmd.getBlockSelections().inline<'currentSelectionPath'>((ctx, next) => {
           const currentBlockSelections = ctx.currentBlockSelections;
-          assertExists(currentBlockSelections);
+          if (!currentBlockSelections) {
+            return;
+          }
           const blockSelection = currentBlockSelections.at(-1);
           if (!blockSelection) {
             return;
           }
           next({ currentSelectionPath: blockSelection.blockId });
+        }),
+        cmd.getImageSelections().inline<'currentSelectionPath'>((ctx, next) => {
+          const currentImageSelections = ctx.currentImageSelections;
+          if (!currentImageSelections) {
+            return;
+          }
+          const imageSelection = currentImageSelections.at(-1);
+          if (!imageSelection) {
+            return;
+          }
+          next({ currentSelectionPath: imageSelection.blockId });
         }),
       ])
       .getBlockIndex()
@@ -156,7 +166,7 @@ export class PageClipboard {
             e,
             this._std.doc,
             ctx.parentBlock.model.id,
-            ctx.blockIndex ? ctx.blockIndex + 1 : undefined
+            ctx.blockIndex ? ctx.blockIndex + 1 : 1
           )
           .catch(console.error);
 
@@ -165,23 +175,27 @@ export class PageClipboard {
       .run();
   };
 
-  onBlockSnapshotPaste = (
-    snapshot: BlockSnapshot,
-    doc: Doc,
-    parent?: string,
-    index?: number
-  ) => {
-    this._std.command
-      .chain()
-      .inline((_ctx, next) => {
-        this._std.clipboard
-          .pasteBlockSnapshot(snapshot, doc, parent, index)
-          .catch(console.error);
+  constructor(host: BlockComponent) {
+    this.host = host;
+  }
 
-        return next();
-      })
-      .run();
-  };
+  private get _std() {
+    return this.host.std;
+  }
+
+  hostConnected() {
+    if (this._disposables.disposed) {
+      this._disposables = new DisposableGroup();
+    }
+    this.host.handleEvent('copy', this.onPageCopy);
+    this.host.handleEvent('paste', this.onPagePaste);
+    this.host.handleEvent('cut', this.onPageCut);
+    this._init();
+  }
+
+  hostDisconnected() {
+    this._disposables.dispose();
+  }
 }
 
 export { copyMiddleware, pasteMiddleware };

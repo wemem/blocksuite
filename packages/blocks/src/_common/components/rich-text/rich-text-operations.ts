@@ -1,7 +1,11 @@
 import type { EditorHost } from '@blocksuite/block-std';
-import { assertExists } from '@blocksuite/global/utils';
 import type { Doc } from '@blocksuite/store';
+
 import { type BlockModel, Text } from '@blocksuite/store';
+
+import type { ListBlockModel } from '../../../list-block/index.js';
+import type { RootBlockModel } from '../../../root-block/index.js';
+import type { ExtendedModel } from '../../types.js';
 
 import {
   isInsideBlockByFlavour,
@@ -20,10 +24,7 @@ import {
   focusBlockByModel,
   focusTitle,
 } from '../../../_common/utils/selection.js';
-import type { ListBlockModel } from '../../../list-block/index.js';
-import type { RootBlockModel } from '../../../root-block/index.js';
 import { EMBED_BLOCK_FLAVOUR_LIST } from '../../consts.js';
-import type { ExtendedModel } from '../../types.js';
 
 /**
  * Whether the block supports rendering its children.
@@ -90,10 +91,11 @@ export function handleBlockEndEnter(
 
       const nextModel = doc.getNext(newParent);
       if (nextModel && matchFlavours(nextModel, ['affine:paragraph'])) {
-        asyncFocusRichText(editorHost, nextModel.id, {
-          index: nextModel.text.yText.length,
-          length: 0,
-        })?.catch(console.error);
+        asyncFocusRichText(
+          editorHost,
+          nextModel.id,
+          nextModel.text.length
+        )?.catch(console.error);
         return;
       }
 
@@ -117,18 +119,27 @@ export function handleBlockEndEnter(
   // make adding text block by enter a standalone operation
   doc.captureSync();
 
-  // before press enter:
-  // aaa|
-  //   bbb
-  //
-  // after press enter:
-  // aaa
-  // |
-  //   bbb
-  const id = doc.addBlock(flavour, blockProps, parent, index + 1);
-  const newModel = doc.getBlockById(id);
-  assertExists(newModel);
-  doc.moveBlocks(model.children, newModel);
+  let id: string;
+
+  if (model.children.length > 0) {
+    // before:
+    // aaa|
+    //   bbb
+    //
+    // after:
+    // aaa
+    //   |
+    //   bbb
+    id = doc.addBlock(flavour, blockProps, model, 0);
+  } else {
+    // before:
+    // aaa|
+    //
+    // after:
+    // aaa
+    // |
+    id = doc.addBlock(flavour, blockProps, parent, index + 1);
+  }
 
   // 4. If the target block is a numbered list, update the prefix of next siblings
   if (matchFlavours(model, ['affine:list']) && model.type === 'numbered') {
@@ -165,25 +176,37 @@ export function handleBlockSplit(
 
   const parent = doc.getParent(model);
   if (!parent) return;
+  const modelIndex = parent.children.indexOf(model);
+  if (modelIndex === -1) return;
 
   doc.captureSync();
   const right = model.text.split(splitIndex, splitLength);
 
-  const newParent = parent;
-  const newBlockIndex = newParent.children.indexOf(model) + 1;
-  const children = [...model.children];
-  doc.updateBlock(model, { children: [] });
-  const id = doc.addBlock(
-    model.flavour as never,
-    {
-      text: right,
-      type: model.type,
-      children,
-    },
-    newParent,
-    newBlockIndex
-  );
-  return asyncFocusRichText(editorHost, id);
+  if (model.children.length > 0 && splitIndex > 0) {
+    const id = doc.addBlock(
+      model.flavour as BlockSuite.Flavour,
+      {
+        text: right,
+        type: model.type,
+      },
+      model,
+      0
+    );
+    return asyncFocusRichText(editorHost, id);
+  } else {
+    const id = doc.addBlock(
+      model.flavour as BlockSuite.Flavour,
+      {
+        text: right,
+        type: model.type,
+      },
+      parent,
+      modelIndex + 1
+    );
+    const newModel = doc.getBlock(id).model;
+    doc.moveBlocks(model.children, newModel);
+    return asyncFocusRichText(editorHost, id);
+  }
 }
 
 /**
@@ -209,7 +232,7 @@ export function handleIndent(
 ) {
   const doc = model.doc;
   const previousSibling = doc.getPrev(model);
-  if (!previousSibling || !supportsChildren(previousSibling)) {
+  if (doc.readonly || !previousSibling || !supportsChildren(previousSibling)) {
     // Bottom, can not indent, do nothing
     return;
   }
@@ -273,7 +296,7 @@ export function handleMultiBlockIndent(
   const indentModels = models.slice(firstIndentIndex);
   indentModels.forEach(model => {
     const parent = doc.getParent(model);
-    assertExists(parent);
+    if (!parent) return;
     // Only indent the model which parent is not in the `indentModels`
     // When parent is in the `indentModels`, it means the parent has been indented
     // And the model should be indented with its parent
@@ -306,7 +329,7 @@ export function handleUnindent(
 ) {
   const doc = model.doc;
   const parent = doc.getParent(model);
-  if (!parent || parent.role !== 'content') {
+  if (doc.readonly || !parent || parent.role !== 'content') {
     // Top most, can not unindent, do nothing
     return;
   }
@@ -370,8 +393,7 @@ export function handleMultiBlockOutdent(
   for (let i = outdentModels.length - 1; i >= 0; i--) {
     const model = outdentModels[i];
     const parent = doc.getParent(model);
-    assertExists(parent);
-    if (!outdentModels.includes(parent)) {
+    if (parent && !outdentModels.includes(parent)) {
       handleUnindent(editorHost, model);
     }
   }
@@ -399,8 +421,7 @@ export function handleRemoveAllIndentForMultiBlocks(
   for (let i = models.length - 1; i >= 0; i--) {
     const model = models[i];
     const parent = doc.getParent(model);
-    assertExists(parent);
-    if (!matchFlavours(parent, ['affine:note'])) {
+    if (parent && !matchFlavours(parent, ['affine:note'])) {
       handleRemoveAllIndent(editorHost, model);
     }
   }
@@ -583,7 +604,7 @@ function handleNoPreviousSibling(editorHost: EditorHost, model: ExtendedModel) {
   const doc = model.doc;
   const text = model.text;
   const parent = doc.getParent(model);
-  assertExists(parent);
+  if (!parent) return false;
   const titleElement = getDocTitleByEditorHost(
     editorHost
   ) as HTMLTextAreaElement | null;
@@ -614,7 +635,7 @@ function handleNoPreviousSibling(editorHost: EditorHost, model: ExtendedModel) {
   // Preserve at least one block to be able to focus on container click
   if (doc.getNext(model) || model.children.length > 0) {
     const parent = doc.getParent(model);
-    assertExists(parent);
+    if (!parent) return false;
     doc.deleteBlock(model, {
       bringChildrenTo: parent,
     });
@@ -668,7 +689,7 @@ function handleParagraphDeleteActions(
       editorHost,
       previousSibling
     );
-    assertExists(previousSiblingElement);
+    if (!previousSiblingElement) return false;
     const selection = editorHost.selection.create('block', {
       blockId: previousSiblingElement.blockId,
     });
@@ -698,13 +719,7 @@ function handleParagraphDeleteActions(
         previousSibling,
         parent
       ) ||
-      handleEmbedDividerCodeSibling(
-        editorHost,
-        model,
-        previousSibling,
-        parent
-      ) ||
-      handleUnknownBlockBackspace(previousSibling)
+      handleEmbedDividerCodeSibling(editorHost, model, previousSibling, parent)
     );
   }
   return false;
@@ -857,7 +872,7 @@ function handleParagraphBlockForwardDelete(
           editorHost,
           nextSibling
         );
-        assertExists(nextSiblingComponent);
+        if (!nextSiblingComponent) return false;
         editorHost.selection.setGroup('note', [
           editorHost.selection.create('block', {
             blockId: nextSiblingComponent.blockId,
@@ -913,20 +928,6 @@ function handleParagraphBlockForwardDelete(
   }
 }
 
-function handleUnknownBlockBackspace(model: ExtendedModel) {
-  throw new Error(
-    'Failed to handle backspace! Unknown block flavours! flavour:' +
-      model.flavour
-  );
-}
-
-function handleUnknownBlockForwardDelete(model: ExtendedModel) {
-  throw new Error(
-    'Failed to handle forwarddelete! Unknown block flavours! flavour:' +
-      model.flavour
-  );
-}
-
 export function handleLineStartBackspace(
   editorHost: EditorHost,
   model: ExtendedModel
@@ -937,8 +938,6 @@ export function handleLineStartBackspace(
   ) {
     return;
   }
-
-  handleUnknownBlockBackspace(model);
 }
 
 export function handleLineEndForwardDelete(
@@ -953,5 +952,4 @@ export function handleLineEndForwardDelete(
     handleDatabaseBlockForwardDelete(model);
     return;
   }
-  handleUnknownBlockForwardDelete(model);
 }

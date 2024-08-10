@@ -1,6 +1,7 @@
 import type { BlockService } from '@blocksuite/block-std';
+
 import { DisposableGroup, Slot } from '@blocksuite/global/utils';
-import { isPlainObject, recursive } from 'merge';
+import { isPlainObject, merge } from 'merge';
 import { z } from 'zod';
 
 import {
@@ -59,30 +60,48 @@ const TextVerticalAlignSchema = z.nativeEnum(TextVerticalAlign);
 const ShapeTypeSchema = z.nativeEnum(ShapeType);
 const NoteDisplayModeSchema = z.nativeEnum(NoteDisplayMode);
 
+const ColorSchema = z.union([
+  z.object({
+    normal: z.string(),
+  }),
+  z.object({
+    light: z.string(),
+    dark: z.string(),
+  }),
+]);
+const LineColorSchema = z.union([LineColorsSchema, ColorSchema]);
+const ShapeFillColorSchema = z.union([FillColorsSchema, ColorSchema]);
+const ShapeStrokeColorSchema = z.union([StrokeColorsSchema, ColorSchema]);
+const TextColorSchema = z.union([z.string(), ColorSchema]);
+const NoteBackgroundColorSchema = z.union([
+  NoteBackgroundColorsSchema,
+  ColorSchema,
+]);
+
 const LastPropsSchema = z.object({
   connector: z.object({
     frontEndpointStyle: ConnectorEndpointSchema,
     rearEndpointStyle: ConnectorEndpointSchema,
     strokeStyle: StrokeStyleSchema,
-    stroke: LineColorsSchema,
+    stroke: LineColorSchema,
     strokeWidth: LineWidthSchema,
     rough: z.boolean(),
     mode: z.number().optional(),
   }),
   brush: z.object({
-    color: LineColorsSchema,
+    color: LineColorSchema,
     lineWidth: LineWidthSchema,
   }),
   shape: z.object({
     shapeType: ShapeTypeSchema,
-    fillColor: FillColorsSchema,
-    strokeColor: StrokeColorsSchema,
+    fillColor: ShapeFillColorSchema,
+    strokeColor: ShapeStrokeColorSchema,
     shapeStyle: ShapeStyleSchema,
     filled: z.boolean(),
     radius: z.number(),
     strokeWidth: z.number().optional(),
     strokeStyle: StrokeStyleSchema.optional(),
-    color: z.string().optional(),
+    color: TextColorSchema.optional(),
     fontSize: ShapeTextFontSizeSchema.optional(),
     fontFamily: FontFamilySchema.optional(),
     fontWeight: FontWeightSchema.optional(),
@@ -93,7 +112,7 @@ const LastPropsSchema = z.object({
     roughness: z.number().optional(),
   }),
   text: z.object({
-    color: z.string(),
+    color: TextColorSchema,
     fontFamily: FontFamilySchema,
     textAlign: TextAlignSchema,
     fontWeight: FontWeightSchema,
@@ -101,14 +120,14 @@ const LastPropsSchema = z.object({
     fontSize: z.number(),
   }),
   'affine:edgeless-text': z.object({
-    color: z.string(),
+    color: TextColorSchema,
     fontFamily: FontFamilySchema,
     textAlign: TextAlignSchema,
     fontWeight: FontWeightSchema,
     fontStyle: FontStyleSchema,
   }),
   'affine:note': z.object({
-    background: NoteBackgroundColorsSchema,
+    background: NoteBackgroundColorSchema,
     displayMode: NoteDisplayModeSchema.optional(),
     edgeless: z.object({
       style: z.object({
@@ -171,6 +190,8 @@ export type SerializedViewport = z.infer<
 >;
 
 export class EditPropsStore {
+  private _disposables = new DisposableGroup();
+
   private _lastProps: LastProps = {
     connector: {
       frontEndpointStyle: DEFAULT_FRONT_END_POINT_STYLE,
@@ -225,8 +246,6 @@ export class EditPropsStore {
     },
   };
 
-  private _disposables = new DisposableGroup();
-
   slots = {
     lastPropsUpdated: new Slot<{
       type: LastPropsKey;
@@ -246,6 +265,10 @@ export class EditPropsStore {
         this._lastProps = result.data;
       }
     }
+  }
+
+  private _getStorage<T extends StoragePropsKey>(key: T) {
+    return isSessionProp(key) ? sessionStorage : localStorage;
   }
 
   private _getStorageKey<T extends StoragePropsKey>(key: T) {
@@ -272,33 +295,8 @@ export class EditPropsStore {
     }
   }
 
-  private _getStorage<T extends StoragePropsKey>(key: T) {
-    return isSessionProp(key) ? sessionStorage : localStorage;
-  }
-
-  getLastProps<T extends LastPropsKey>(type: T) {
-    return this._lastProps[type] as LastProps[T];
-  }
-
-  recordLastProps(
-    type: BlockSuite.EdgelessModelKeyType,
-    recordProps: Partial<LastProps[LastPropsKey]>
-  ) {
-    if (!isLastPropType(type)) return;
-
-    const props = this._lastProps[type];
-    const overrideProps = extractProps(
-      recordProps,
-      LastPropsSchema.shape[type]
-    );
-    if (Object.keys(overrideProps).length === 0) return;
-
-    recursive(props, overrideProps);
-    this.slots.lastPropsUpdated.emit({ type, props: overrideProps });
-  }
-
   applyLastProps(
-    type: BlockSuite.EdgelessModelKeyType,
+    type: BlockSuite.EdgelessModelKeys,
     props: Record<string, unknown>
   ) {
     if (!isLastPropType(type)) return;
@@ -307,14 +305,13 @@ export class EditPropsStore {
     deepAssign(props, lastProps);
   }
 
-  setStorage<T extends StoragePropsKey>(key: T, value: StorageProps[T]) {
-    const oldValue = this.getStorage(key);
-    this._getStorage(key).setItem(
-      this._getStorageKey(key),
-      JSON.stringify(value)
-    );
-    if (oldValue === value) return;
-    this.slots.storageUpdated.emit({ key, value });
+  dispose() {
+    this._disposables.dispose();
+    this.slots.lastPropsUpdated.dispose();
+  }
+
+  getLastProps<T extends LastPropsKey>(type: T) {
+    return this._lastProps[type] as LastProps[T];
   }
 
   getStorage<T extends StoragePropsKey>(key: T) {
@@ -338,9 +335,31 @@ export class EditPropsStore {
     }
   }
 
-  dispose() {
-    this._disposables.dispose();
-    this.slots.lastPropsUpdated.dispose();
+  recordLastProps(
+    type: BlockSuite.EdgelessModelKeys,
+    recordProps: Partial<LastProps[LastPropsKey]>
+  ) {
+    if (!isLastPropType(type)) return;
+
+    const props = this._lastProps[type];
+    const overrideProps = extractProps(
+      recordProps,
+      LastPropsSchema.shape[type]
+    );
+    if (Object.keys(overrideProps).length === 0) return;
+
+    merge(props, overrideProps);
+    this.slots.lastPropsUpdated.emit({ type, props: overrideProps });
+  }
+
+  setStorage<T extends StoragePropsKey>(key: T, value: StorageProps[T]) {
+    const oldValue = this.getStorage(key);
+    this._getStorage(key).setItem(
+      this._getStorageKey(key),
+      JSON.stringify(value)
+    );
+    if (oldValue === value) return;
+    this.slots.storageUpdated.emit({ key, value });
   }
 }
 
@@ -353,6 +372,13 @@ function extractProps(
   Object.entries(props).forEach(([key, value]) => {
     if (!(key in ref.shape)) return;
     if (isPlainObject(value)) {
+      if (isColorType(key, value)) {
+        const color = processColorValue(value as z.infer<typeof ColorSchema>);
+        if (Object.keys(color).length === 0) return;
+        result[key] = color;
+        return;
+      }
+
       result[key] = extractProps(
         props[key] as Record<string, unknown>,
         ref.shape[key] as z.ZodObject<z.ZodRawShape>
@@ -366,7 +392,7 @@ function extractProps(
 }
 
 function isLastPropType(
-  type: BlockSuite.EdgelessModelKeyType
+  type: BlockSuite.EdgelessModelKeys
 ): type is keyof LastProps {
   return Object.keys(LastPropsSchema.shape).includes(type);
 }
@@ -392,4 +418,21 @@ function deepAssign(
   });
 
   return target;
+}
+
+function isColorType(key: string, value: unknown) {
+  return (
+    ['background', 'color', 'stroke', 'fill', 'Color'].some(
+      stuff => key.startsWith(stuff) || key.endsWith(stuff)
+    ) && ColorSchema.safeParse(value).success
+  );
+}
+
+// Don't want the user to create a transparent element, so the alpha value is removed.
+function processColorValue(value: z.infer<typeof ColorSchema>) {
+  const obj: Record<string, string> = {};
+  for (const [k, v] of Object.entries(value)) {
+    obj[k] = v.startsWith('#') ? v.substring(0, 7) : v;
+  }
+  return obj;
 }

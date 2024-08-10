@@ -2,6 +2,7 @@
 import { expect } from '@playwright/test';
 
 import {
+  SHORT_KEY,
   activeEmbed,
   activeNoteInEdgeless,
   addNoteByClick,
@@ -13,7 +14,6 @@ import {
   fillLine,
   focusRichText,
   focusTitle,
-  getCenterPosition,
   getCursorBlockIdAndHeight,
   getEditorHostLocator,
   getIndexCoordinate,
@@ -44,7 +44,6 @@ import {
   scrollToTop,
   selectAllByKeyboard,
   setInlineRangeInInlineEditor,
-  SHORT_KEY,
   switchEditorMode,
   type,
   undoByKeyboard,
@@ -1276,7 +1275,7 @@ test('should select texts on dragging around the page', async ({ page }) => {
   await assertRichTexts(page, ['123', '45']);
 });
 
-test('should ndent native multi-selection block', async ({ page }) => {
+test('should indent native multi-selection block', async ({ page }) => {
   await enterPlaygroundRoom(page);
   await initEmptyParagraphState(page);
   await initThreeParagraphs(page);
@@ -1675,33 +1674,6 @@ test('should not show option menu of image on native selection', async ({
   await expect(page.locator('.affine-image-toolbar-container')).toHaveCount(0);
 });
 
-test.skip('should be cleared when dragging block card from BlockHub', async ({
-  page,
-}) => {
-  await enterPlaygroundRoom(page);
-  await initEmptyParagraphState(page);
-  await initThreeParagraphs(page);
-  await assertRichTexts(page, ['123', '456', '789']);
-
-  await dragBetweenIndices(page, [0, 0], [2, 3]);
-  expect(await getSelectedText(page)).toBe('123456789');
-
-  await page.click('.block-hub-menu-container [role="menuitem"]');
-  await page.waitForTimeout(200);
-  const blankMenu = '.block-hub-icon-container:nth-child(1)';
-
-  const blankMenuRect = await getCenterPosition(page, blankMenu);
-  const targetPos = await getCenterPosition(page, '[data-block-id="2"]');
-  await dragBetweenCoords(
-    page,
-    { x: blankMenuRect.x, y: blankMenuRect.y },
-    { x: targetPos.x, y: targetPos.y + 5 },
-    { steps: 50 }
-  );
-
-  expect(await getSelectedText(page)).toBe('');
-});
-
 test('should select with shift-click', async ({ page }) => {
   await enterPlaygroundRoom(page);
   await initEmptyParagraphState(page);
@@ -1968,4 +1940,60 @@ test('Use arrow up and down to select two types of block', async ({ page }) => {
   await pressArrowDown(page);
   await assertNativeSelectionRangeCount(page, 1);
   await assertRichTextInlineRange(page, 2, 0);
+});
+
+test.describe('should scroll text to view when drag to select at top or bottom edge', () => {
+  test('from top to bottom', async ({ page }) => {
+    await enterPlaygroundRoom(page);
+    await initEmptyParagraphState(page);
+    await focusRichText(page);
+    for (let i = 0; i < 50; i++) {
+      await type(page, `${i}`);
+      await pressEnter(page);
+    }
+
+    const startCoord = await getIndexCoordinate(page, [49, 2]);
+    const endCoord = await getIndexCoordinate(page, [0, 0]);
+
+    // simulate actual drag to select from bottom to top
+    await page.mouse.move(startCoord.x, startCoord.y);
+    await page.mouse.down();
+    await page.mouse.move(endCoord.x, 0); // move to top edge
+    await page.waitForTimeout(5000);
+    await page.mouse.up();
+
+    const firstParagraph = page.locator('[data-block-id="2"]');
+    await expect(firstParagraph).toBeInViewport();
+  });
+
+  // playwright doesn't auto scroll when drag selection to bottom edge
+  test.skip('from bottom to top', async ({ page }) => {
+    await enterPlaygroundRoom(page);
+    await initEmptyParagraphState(page);
+    await focusRichText(page);
+    for (let i = 0; i < 50; i++) {
+      await type(page, `${i}`);
+      await pressEnter(page);
+    }
+
+    const firstParagraph = page.locator('[data-block-id="2"]');
+    await firstParagraph.scrollIntoViewIfNeeded();
+
+    const startCoord = await getIndexCoordinate(page, [0, 0]);
+    const endCoord = await getIndexCoordinate(page, [49, 2]);
+
+    const viewportHeight = await page.evaluate(
+      () => document.documentElement.clientHeight
+    );
+
+    // simulate actual drag to select from top to bottom
+    await page.mouse.move(startCoord.x, startCoord.y);
+    await page.mouse.down();
+    await page.mouse.move(endCoord.x, viewportHeight - 10); // move to bottom edge
+    await page.waitForTimeout(5000);
+    await page.mouse.up();
+
+    const lastParagraph = page.locator('[data-block-id="51"]');
+    await expect(lastParagraph).toBeInViewport();
+  });
 });

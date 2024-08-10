@@ -1,13 +1,16 @@
+import type { ThemedToken } from 'shiki';
+
 import { ShadowlessElement } from '@blocksuite/block-std';
 import { assertExists } from '@blocksuite/global/utils';
 import { type DeltaInsert, ZERO_WIDTH_SPACE } from '@blocksuite/inline';
 import { html } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
-import type { ThemedToken } from 'shiki';
+import { styleMap } from 'lit/directives/style-map.js';
 
 import type { AffineTextAttributes } from '../_common/inline/presets/affine-inline-specs.js';
-import { getThemeMode } from '../_common/utils/query.js';
 import type { HighlightOptionsGetter } from './code-model.js';
+
+import { ThemeObserver } from '../_common/theme/theme-observer.js';
 import { DARK_THEME, LIGHT_THEME } from './utils/consts.js';
 import {
   highlightCache,
@@ -16,14 +19,6 @@ import {
 
 @customElement('affine-code-line')
 export class AffineCodeLine extends ShadowlessElement {
-  @property({ type: Object })
-  accessor delta: DeltaInsert<AffineTextAttributes> = {
-    insert: ZERO_WIDTH_SPACE,
-  };
-
-  @property({ attribute: false })
-  accessor highlightOptionsGetter: HighlightOptionsGetter | null = null;
-
   override render() {
     assertExists(
       this.highlightOptionsGetter,
@@ -35,7 +30,7 @@ export class AffineCodeLine extends ShadowlessElement {
       return html`<span><v-text .str=${this.delta.insert}></v-text></span>`;
     }
 
-    const mode = getThemeMode();
+    const mode = ThemeObserver.mode;
     const cacheKey: highlightCacheKey = `${this.delta.insert}-${lang}-${mode}`;
     const cache = highlightCache.get(cacheKey);
 
@@ -57,14 +52,22 @@ export class AffineCodeLine extends ShadowlessElement {
     const vTexts = tokens.map(token => {
       return html`<v-text
         .str=${token.content}
-        .styles=${{
+        style=${styleMap({
           color: token.color,
-        }}
+        })}
       ></v-text>`;
     });
 
     return html`<span>${vTexts}</span>`;
   }
+
+  @property({ type: Object })
+  accessor delta: DeltaInsert<AffineTextAttributes> = {
+    insert: ZERO_WIDTH_SPACE,
+  };
+
+  @property({ attribute: false })
+  accessor highlightOptionsGetter: HighlightOptionsGetter | null = null;
 }
 
 declare global {

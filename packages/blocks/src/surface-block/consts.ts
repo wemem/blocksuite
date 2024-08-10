@@ -1,9 +1,11 @@
+import type { ColorScheme } from '../_common/theme/theme-observer.js';
 import type { FontConfig } from '../root-block/font-loader/font-loader.js';
 
 export const ZOOM_MAX = 6.0;
 export const ZOOM_MIN = 0.1;
 export const ZOOM_STEP = 0.25;
 export const ZOOM_INITIAL = 1.0;
+export const ZOOM_WHEEL_STEP = 0.1;
 export const GRID_SIZE = 3000;
 export const GRID_GAP_MIN = 10;
 export const GRID_GAP_MAX = 50;
@@ -12,13 +14,7 @@ export const DEFAULT_ROUGHNESS = 1.4;
 // TODO: need to check the default central area ratio
 export const DEFAULT_CENTRAL_AREA_RATIO = 0.3;
 
-export interface IBound {
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-  rotate?: number;
-}
+export type Color = string | { [K in ColorScheme | 'normal']?: string };
 
 export enum ShapeStyle {
   General = 'General',
@@ -26,9 +22,9 @@ export enum ShapeStyle {
 }
 
 export enum StrokeStyle {
-  Solid = 'solid',
   Dash = 'dash',
   None = 'none',
+  Solid = 'solid',
 }
 
 export interface IModelCoord {
@@ -37,15 +33,15 @@ export interface IModelCoord {
 }
 
 export enum TextAlign {
-  Left = 'left',
   Center = 'center',
+  Left = 'left',
   Right = 'right',
 }
 
 export enum TextVerticalAlign {
-  Top = 'top',
-  Center = 'center',
   Bottom = 'bottom',
+  Center = 'center',
+  Top = 'top',
 }
 
 export enum TextResizing {
@@ -54,7 +50,7 @@ export enum TextResizing {
 }
 
 export type TextStyleProps = {
-  color: string;
+  color: Color;
   fontFamily: FontFamily;
   fontSize: number;
   fontStyle: FontStyle;
@@ -63,26 +59,26 @@ export type TextStyleProps = {
 };
 
 export enum FontWeight {
-  Light = '300',
-  Regular = '400',
-  Medium = '500',
-  SemiBold = '600',
   Bold = '700',
+  Light = '300',
+  Medium = '500',
+  Regular = '400',
+  SemiBold = '600',
 }
 
 export enum FontStyle {
-  Normal = 'normal',
   Italic = 'italic',
+  Normal = 'normal',
 }
 
 export enum FontFamily {
+  BebasNeue = 'blocksuite:surface:BebasNeue',
   Inter = 'blocksuite:surface:Inter',
   Kalam = 'blocksuite:surface:Kalam',
-  Satoshi = 'blocksuite:surface:Satoshi',
-  Poppins = 'blocksuite:surface:Poppins',
   Lora = 'blocksuite:surface:Lora',
-  BebasNeue = 'blocksuite:surface:BebasNeue',
   OrelegaOne = 'blocksuite:surface:OrelegaOne',
+  Poppins = 'blocksuite:surface:Poppins',
+  Satoshi = 'blocksuite:surface:Satoshi',
 }
 
 export const FontFamilyMap = {

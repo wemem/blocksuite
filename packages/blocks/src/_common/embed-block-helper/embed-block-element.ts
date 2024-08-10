@@ -1,13 +1,18 @@
 import type { BlockService } from '@blocksuite/block-std';
-import { assertExists } from '@blocksuite/global/utils';
 import type { BlockModel } from '@blocksuite/store';
 import type { TemplateResult } from 'lit';
+
+import { Bound, Point } from '@blocksuite/global/utils';
 import { html, render } from 'lit';
 import { query } from 'lit/decorators.js';
 import { classMap } from 'lit/directives/class-map.js';
 import { styleMap } from 'lit/directives/style-map.js';
 
+import type { EdgelessRootService } from '../../root-block/edgeless/edgeless-root-service.js';
 import type { DragHandleOption } from '../../root-block/widgets/drag-handle/config.js';
+import type { GfxCompatibleProps } from '../edgeless/mixin/index.js';
+
+import { BOOKMARK_MIN_WIDTH } from '../../root-block/edgeless/utils/consts.js';
 import {
   AFFINE_DRAG_HANDLE_WIDGET,
   AffineDragHandleWidget,
@@ -17,57 +22,18 @@ import {
   convertDragPreviewDocToEdgeless,
   convertDragPreviewEdgelessToDoc,
 } from '../../root-block/widgets/drag-handle/utils.js';
-import { Bound } from '../../surface-block/index.js';
-import { BlockComponent } from '../components/block-component.js';
+import { CaptionedBlockComponent } from '../components/captioned-block-component.js';
 import { EMBED_CARD_HEIGHT, EMBED_CARD_WIDTH } from '../consts.js';
-import type { EdgelessSelectableProps } from '../edgeless/mixin/index.js';
-import {
-  type EmbedCardStyle,
-  getThemeMode,
-  matchFlavours,
-} from '../utils/index.js';
+import { ThemeObserver } from '../theme/theme-observer.js';
+import { type EmbedCardStyle, matchFlavours } from '../utils/index.js';
 import { styles } from './styles.js';
 
-export class EmbedBlockElement<
-  Model extends
-    BlockModel<EdgelessSelectableProps> = BlockModel<EdgelessSelectableProps>,
+export class EmbedBlockComponent<
+  Model extends BlockModel<GfxCompatibleProps> = BlockModel<GfxCompatibleProps>,
   Service extends BlockService = BlockService,
   WidgetName extends string = string,
-> extends BlockComponent<Model, Service, WidgetName> {
-  get isInSurface() {
-    return this._isInSurface;
-  }
-
-  get edgeless() {
-    if (!this._isInSurface) {
-      return null;
-    }
-    return this.host.querySelector('affine-edgeless-root');
-  }
-
-  get surface() {
-    if (!this.isInSurface) return null;
-    return this.host.querySelector('affine-surface');
-  }
-
-  get bound(): Bound {
-    return Bound.deserialize(
-      (this.edgeless?.service.getElementById(this.model.id) ?? this.model).xywh
-    );
-  }
-
-  @query('.embed-block-container')
-  protected accessor embedBlock!: HTMLDivElement;
-
-  static override styles = styles;
-
-  private _isInSurface = false;
-
-  private _fetchAbortController = new AbortController();
-
-  get fetchAbortController() {
-    return this._fetchAbortController;
-  }
+> extends CaptionedBlockComponent<Model, Service, WidgetName> {
+  protected _cardStyle: EmbedCardStyle = 'horizontal';
 
   private _dragHandleOption: DragHandleOption = {
     flavour: /affine:embed-*/,
@@ -101,20 +67,19 @@ export class EmbedBlockElement<
         startDragging([blockComponent], state);
         return true;
       } else if (isInSurface && isDraggingByDragHandle) {
-        const embedPortal = blockComponent.closest(
-          '.edgeless-block-portal-embed'
-        );
-        assertExists(embedPortal);
-        const dragPreviewEl = embedPortal.cloneNode() as HTMLElement;
-        dragPreviewEl.style.transform = '';
-        dragPreviewEl.style.left = '0';
-        dragPreviewEl.style.top = '0';
+        const edgelessService = editorHost.std.spec.getService(
+          'affine:page'
+        ) as EdgelessRootService;
+        const zoom = edgelessService?.viewport.zoom ?? 1;
+        const dragPreviewEl = document.createElement('div');
+        const bound = Bound.deserialize(blockComponent.model.xywh);
+        const offset = new Point(bound.x * zoom, bound.y * zoom);
         render(
           blockComponent.host.renderModel(blockComponent.model),
           dragPreviewEl
         );
 
-        startDragging([blockComponent], state, dragPreviewEl);
+        startDragging([blockComponent], state, dragPreviewEl, offset);
         return true;
       }
       return false;
@@ -133,8 +98,7 @@ export class EmbedBlockElement<
       const isInSurface = blockComponent.isInSurface;
       const target = captureEventTarget(state.raw.target);
       const isTargetEdgelessContainer =
-        target?.classList.contains('edgeless') &&
-        target?.classList.contains('affine-block-children-container');
+        target?.classList.contains('edgeless-container');
 
       if (isInSurface) {
         const style = blockComponent._cardStyle;
@@ -161,15 +125,73 @@ export class EmbedBlockElement<
     },
   };
 
-  protected _cardStyle: EmbedCardStyle = 'horizontal';
-
-  protected _width = EMBED_CARD_WIDTH.horizontal;
+  private _fetchAbortController = new AbortController();
 
   protected _height = EMBED_CARD_HEIGHT.horizontal;
 
-  override accessor useCaptionEditor = true;
+  private _isInSurface = false;
 
-  override accessor showBlockSelection = false;
+  protected _width = EMBED_CARD_WIDTH.horizontal;
+
+  static override styles = styles;
+
+  renderEmbed = (children: () => TemplateResult) => {
+    const theme = ThemeObserver.mode;
+    const isSelected = !!this.selected?.is('block');
+
+    if (!this.isInSurface) {
+      if (
+        this._cardStyle === 'horizontal' ||
+        this._cardStyle === 'horizontalThin' ||
+        this._cardStyle === 'list'
+      ) {
+        this.style.display = 'block';
+        this.style.minWidth = `${BOOKMARK_MIN_WIDTH}px`;
+      }
+
+      return html`
+        <div
+          class=${classMap({
+            'embed-block-container': true,
+            [theme]: true,
+            selected: isSelected,
+          })}
+          style=${styleMap({
+            position: 'relative',
+            width: '100%',
+          })}
+        >
+          ${children()}
+        </div>
+      `;
+    }
+
+    const width = this._width;
+    const height = this._height;
+    const bound = Bound.deserialize(this.model.xywh);
+    const scaleX = bound.w / width;
+    const scaleY = bound.h / height;
+
+    this.style.left = `${bound.x}px`;
+    this.style.top = `${bound.y}px`;
+    this.style.width = `${width}px`;
+    this.style.height = `${height}px`;
+    this.style.zIndex = `${this.toZIndex()}`;
+
+    return html`
+      <div
+        class="embed-block-container"
+        style=${styleMap({
+          width: `100%`,
+          height: `100%`,
+          transform: `scale(${scaleX}, ${scaleY})`,
+          transformOrigin: '0 0',
+        })}
+      >
+        ${children()}
+      </div>
+    `;
+  };
 
   override connectedCallback() {
     super.connectedCallback();
@@ -189,6 +211,10 @@ export class EmbedBlockElement<
     this.disposables.add(
       AffineDragHandleWidget.registerOption(this._dragHandleOption)
     );
+
+    if (this.isInSurface) {
+      this.style.position = 'absolute';
+    }
   }
 
   override disconnectedCallback(): void {
@@ -196,51 +222,43 @@ export class EmbedBlockElement<
     this._fetchAbortController.abort();
   }
 
-  renderEmbed = (children: () => TemplateResult) => {
-    const theme = getThemeMode();
-    const isSelected = !!this.selected?.is('block');
+  toZIndex() {
+    // @ts-ignore
+    return this.rootService?.layer.getZIndex(this.model) ?? 1;
+  }
 
-    if (!this.isInSurface) {
-      return html`
-        <div
-          class=${classMap({
-            'embed-block-container': true,
-            [theme]: true,
-            selected: isSelected,
-          })}
-          style=${styleMap({
-            position: 'relative',
-            width: '100%',
-          })}
-        >
-          ${children()}
-        </div>
-      `;
+  updateZIndex() {
+    this.style.zIndex = `${this.toZIndex()}`;
+  }
+
+  get bound(): Bound {
+    return Bound.deserialize(this.model.xywh);
+  }
+
+  get fetchAbortController() {
+    return this._fetchAbortController;
+  }
+
+  get isInSurface() {
+    return this._isInSurface;
+  }
+
+  get rootService() {
+    const service = this.host.spec.getService(
+      'affine:page'
+    ) as EdgelessRootService;
+
+    if (!service?.surface) {
+      return null;
     }
 
-    const surface = this.surface;
-    assertExists(surface);
+    return service;
+  }
 
-    const width = this._width;
-    const height = this._height;
-    const bound = Bound.deserialize(
-      (this.edgeless?.service.getElementById(this.model.id) ?? this.model).xywh
-    );
-    const scaleX = bound.w / width;
-    const scaleY = bound.h / height;
+  @query('.embed-block-container')
+  protected accessor embedBlock!: HTMLDivElement;
 
-    return html`
-      <div
-        class="embed-block-container"
-        style=${styleMap({
-          width: `${width}px`,
-          height: `${height}px`,
-          transform: `scale(${scaleX}, ${scaleY})`,
-          transformOrigin: '0 0',
-        })}
-      >
-        ${children()}
-      </div>
-    `;
-  };
+  override accessor showBlockSelection = false;
+
+  override accessor useCaptionEditor = true;
 }

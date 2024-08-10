@@ -4,8 +4,9 @@ import type {
   AffineAIPanelWidget,
   AffineAIPanelWidgetConfig,
 } from '@blocksuite/blocks';
-import { assertExists } from '@blocksuite/global/utils';
 import type { TemplateResult } from 'lit';
+
+import { assertExists } from '@blocksuite/global/utils';
 
 import {
   buildCopyConfig,
@@ -206,7 +207,7 @@ export function handleInlineAskAIAction(host: EditorHost) {
   const panel = getAIPanel(host);
   const selection = host.selection.find('text');
   const lastBlockPath = selection
-    ? selection.to?.blockId ?? selection.blockId
+    ? (selection.to?.blockId ?? selection.blockId)
     : null;
   if (!lastBlockPath) return;
   const block = host.view.getBlock(lastBlockPath);

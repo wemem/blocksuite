@@ -1,14 +1,13 @@
-import * as process from 'node:process';
-
 import type {
   PlaywrightTestConfig,
   PlaywrightWorkerOptions,
 } from '@playwright/test';
 
+import * as process from 'node:process';
+
 const config: PlaywrightTestConfig = {
   fullyParallel: true,
-  testDir: 'src/',
-  testIgnore: ['**.unit.spec.ts'],
+  testDir: 'src/__tests__/e2e',
   webServer: {
     command: 'pnpm -w dev',
     port: 5173,

@@ -2,6 +2,7 @@ import { assertType } from '@blocksuite/global/utils';
 
 import type { MindmapElementModel } from '../../mindmap.js';
 import type { ShapeElementModel } from '../../shape.js';
+
 import { LayoutType, type MindmapNode } from './layout.js';
 
 export function getHoveredArea(
@@ -43,9 +44,8 @@ export function showMergeIndicator(
 
   // the target cannot be the child of source
   const mergeCheck = (sourceTree: MindmapNode): boolean => {
-    if (target === sourceTree) {
-      return false;
-    }
+    if (!target || !sourceTree) return false;
+    if (target === sourceTree) return false;
 
     if (sourceTree.children.length) {
       return sourceTree.children.every(node => mergeCheck(node));

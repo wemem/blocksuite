@@ -1,5 +1,3 @@
-import './template-panel.js';
-
 import {
   arrow,
   autoUpdate,
@@ -7,20 +5,28 @@ import {
   offset,
   shift,
 } from '@floating-ui/dom';
-import { css, html, LitElement } from 'lit';
+import { LitElement, css, html } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
+import { classMap } from 'lit/directives/class-map.js';
+import { repeat } from 'lit/directives/repeat.js';
+
+import type { EdgelessTool } from '../../../types.js';
+import type { EdgelessTemplatePanel } from './template-panel.js';
 
 import { ArrowDownSmallIcon } from '../../../../../_common/icons/text.js';
 import { once } from '../../../../../_common/utils/event.js';
-import type { EdgelessTool } from '../../../types.js';
 import { EdgelessToolbarToolMixin } from '../mixins/tool.mixin.js';
 import { TemplateCard1, TemplateCard2, TemplateCard3 } from './icon.js';
-import type { EdgelessTemplatePanel } from './template-panel.js';
+import './template-panel.js';
 
 @customElement('edgeless-template-button')
 export class EdgelessTemplateButton extends EdgelessToolbarToolMixin(
   LitElement
 ) {
+  private _cleanup: (() => void) | null = null;
+
+  private _prevTool: EdgelessTool | null = null;
+
   static override styles = css`
     :host {
       position: relative;
@@ -114,16 +120,26 @@ export class EdgelessTemplateButton extends EdgelessToolbarToolMixin(
     }
   `;
 
-  @state()
-  private accessor _openedPanel: EdgelessTemplatePanel | null = null;
-
-  private _cleanup: (() => void) | null = null;
-
-  private _prevTool: EdgelessTool | null = null;
+  override enableActiveBackground = true;
 
   override type: EdgelessTool['type'] = 'template';
 
-  override enableActiveBackground = true;
+  private _closePanel() {
+    if (this._openedPanel) {
+      this._openedPanel.remove();
+      this._openedPanel = null;
+      this._cleanup?.();
+      this._cleanup = null;
+      this.requestUpdate();
+
+      if (this._prevTool && this._prevTool.type !== 'template') {
+        this.setEdgelessTool(this._prevTool);
+        this._prevTool = null;
+      } else {
+        this.setEdgelessTool({ type: 'default' });
+      }
+    }
+  }
 
   private _togglePanel() {
     if (this._openedPanel) {
@@ -172,34 +188,35 @@ export class EdgelessTemplateButton extends EdgelessToolbarToolMixin(
     });
   }
 
-  private _closePanel() {
-    if (this._openedPanel) {
-      this._openedPanel.remove();
-      this._openedPanel = null;
-      this._cleanup?.();
-      this._cleanup = null;
-      this.requestUpdate();
-
-      if (this._prevTool && this._prevTool.type !== 'template') {
-        this.setEdgelessTool(this._prevTool);
-        this._prevTool = null;
-      } else {
-        this.setEdgelessTool({ type: 'default' });
-      }
-    }
-  }
-
   override render() {
-    const { theme } = this;
-    const expanded = this._openedPanel !== null;
+    const { cards, _openedPanel } = this;
+    const expanded = _openedPanel !== null;
 
     return html`<edgeless-toolbar-button @click=${this._togglePanel}>
       <div class="template-cards ${expanded ? 'expanded' : ''}">
         <div class="arrow-icon">${ArrowDownSmallIcon}</div>
-        <div class="template-card card1">${TemplateCard1[theme]}</div>
-        <div class="template-card card2">${TemplateCard2[theme]}</div>
-        <div class="template-card card3">${TemplateCard3[theme]}</div>
+        ${repeat(
+          cards,
+          (card, n) => html`
+            <div
+              class=${classMap({
+                'template-card': true,
+                [`card${n + 1}`]: true,
+              })}
+            >
+              ${card}
+            </div>
+          `
+        )}
       </div>
     </edgeless-toolbar-button>`;
   }
+
+  get cards() {
+    const { theme } = this;
+    return [TemplateCard1[theme], TemplateCard2[theme], TemplateCard3[theme]];
+  }
+
+  @state()
+  private accessor _openedPanel: EdgelessTemplatePanel | null = null;
 }

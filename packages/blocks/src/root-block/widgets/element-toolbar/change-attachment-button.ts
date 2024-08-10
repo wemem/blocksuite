@@ -1,43 +1,52 @@
-import '../../edgeless/components/buttons/tool-icon-button.js';
-import '../../edgeless/components/buttons/menu-button.js';
-import '../../edgeless/components/panel/card-style-panel.js';
-
 import { WithDisposable } from '@blocksuite/block-std';
+import { Bound } from '@blocksuite/global/utils';
 import { assertExists } from '@blocksuite/global/utils';
-import { html, LitElement, nothing, type TemplateResult } from 'lit';
+import { LitElement, type TemplateResult, html, nothing } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
 
-import {
-  EMBED_CARD_HEIGHT,
-  EMBED_CARD_WIDTH,
-} from '../../../_common/consts.js';
-import { CaptionIcon, PaletteIcon } from '../../../_common/icons/text.js';
 import type { EmbedCardStyle } from '../../../_common/types.js';
-import { getEmbedCardIcons } from '../../../_common/utils/url.js';
 import type {
   AttachmentBlockComponent,
   AttachmentBlockModel,
   EdgelessRootBlockComponent,
 } from '../../../index.js';
-import { Bound } from '../../../surface-block/index.js';
+
+import '../../../_common/components/toolbar/icon-button.js';
+import '../../../_common/components/toolbar/menu-button.js';
+import '../../../_common/components/toolbar/separator.js';
+import {
+  EMBED_CARD_HEIGHT,
+  EMBED_CARD_WIDTH,
+} from '../../../_common/consts.js';
+import {
+  CaptionIcon,
+  DownloadIcon,
+  PaletteIcon,
+} from '../../../_common/icons/text.js';
+import { getEmbedCardIcons } from '../../../_common/utils/url.js';
+import { downloadAttachmentBlob } from '../../../attachment-block/utils.js';
+import '../../edgeless/components/panel/card-style-panel.js';
 
 @customElement('edgeless-change-attachment-button')
 export class EdgelessChangeAttachmentButton extends WithDisposable(LitElement) {
-  @property({ attribute: false })
-  accessor model!: AttachmentBlockModel;
+  private _download = () => {
+    if (!this._block) return;
+    downloadAttachmentBlob(this._block);
+  };
 
-  @property({ attribute: false })
-  accessor edgeless!: EdgelessRootBlockComponent;
+  private _setCardStyle = (style: EmbedCardStyle) => {
+    const bounds = Bound.deserialize(this.model.xywh);
+    bounds.w = EMBED_CARD_WIDTH[style];
+    bounds.h = EMBED_CARD_HEIGHT[style];
+    const xywh = bounds.serialize();
+    this.model.doc.updateBlock(this.model, { style, xywh });
+  };
 
-  private get _doc() {
-    return this.model.doc;
-  }
+  private _showCaption = () => {
+    this._block?.captionEditor?.show();
+  };
 
-  get std() {
-    return this.edgeless.std;
-  }
-
-  private get _blockElement() {
+  private get _block() {
     const blockSelection =
       this.edgeless.service.selection.surfaceSelections.filter(sel =>
         sel.elements.includes(this.model.id)
@@ -46,12 +55,16 @@ export class EdgelessChangeAttachmentButton extends WithDisposable(LitElement) {
       return;
     }
 
-    const blockElement = this.std.view.getBlock(
+    const block = this.std.view.getBlock(
       blockSelection[0].blockId
     ) as AttachmentBlockComponent | null;
-    assertExists(blockElement);
+    assertExists(block);
 
-    return blockElement;
+    return block;
+  }
+
+  private get _doc() {
+    return this.model.doc;
   }
 
   private get _getCardStyleOptions(): {
@@ -74,43 +87,38 @@ export class EdgelessChangeAttachmentButton extends WithDisposable(LitElement) {
     ];
   }
 
-  private _showCaption = () => {
-    this._blockElement?.captionEditor.show();
-  };
-
-  private _setCardStyle = (style: EmbedCardStyle) => {
-    const bounds = Bound.deserialize(this.model.xywh);
-    bounds.w = EMBED_CARD_WIDTH[style];
-    bounds.h = EMBED_CARD_HEIGHT[style];
-    const xywh = bounds.serialize();
-    this.model.doc.updateBlock(this.model, { style, xywh });
-  };
-
   override render() {
     return html`
-      <edgeless-menu-button
+      <editor-menu-button
         .contentPadding=${'8px'}
         .button=${html`
-          <edgeless-tool-icon-button
-            aria-label="Card style"
-            .tooltip=${'Card style'}
-          >
+          <editor-icon-button aria-label="Card style" .tooltip=${'Card style'}>
             ${PaletteIcon}
-          </edgeless-tool-icon-button>
+          </editor-icon-button>
         `}
       >
         <card-style-panel
-          slot
           .value=${this.model.style}
           .options=${this._getCardStyleOptions}
           .onSelect=${this._setCardStyle}
         >
         </card-style-panel>
-      </edgeless-menu-button>
+      </editor-menu-button>
 
-      <edgeless-menu-divider></edgeless-menu-divider>
+      <editor-toolbar-separator></editor-toolbar-separator>
 
-      <edgeless-tool-icon-button
+      <editor-icon-button
+        aria-label="Download"
+        .tooltip=${'Download'}
+        ?disabled=${this._doc.readonly}
+        @click=${this._download}
+      >
+        ${DownloadIcon}
+      </editor-icon-button>
+
+      <editor-toolbar-separator></editor-toolbar-separator>
+
+      <editor-icon-button
         aria-label="Add caption"
         .tooltip=${'Add caption'}
         class="change-attachment-button caption"
@@ -118,9 +126,19 @@ export class EdgelessChangeAttachmentButton extends WithDisposable(LitElement) {
         @click=${this._showCaption}
       >
         ${CaptionIcon}
-      </edgeless-tool-icon-button>
+      </editor-icon-button>
     `;
   }
+
+  get std() {
+    return this.edgeless.std;
+  }
+
+  @property({ attribute: false })
+  accessor edgeless!: EdgelessRootBlockComponent;
+
+  @property({ attribute: false })
+  accessor model!: AttachmentBlockModel;
 }
 
 declare global {

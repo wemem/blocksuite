@@ -4,25 +4,47 @@ on:
   push:
     branches:
       - master
+    paths-ignore:
+      - '.husky'
+      - '.vscode'
+      - '**.md'
+      - 'scripts/**'
+      - 'packages/docs/**'
   pull_request:
+    paths-ignore:
+      - '.husky'
+      - '.vscode'
+      - '**.md'
+      - 'scripts/**'
+      - 'packages/docs/**'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  actions: read
+  contents: read
 
 jobs:
   lint:
-    name: Run linters
+    name: Lint
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
       - uses: pnpm/action-setup@v4
         name: Install pnpm
         id: pnpm-install
+
       - name: Use Node.js LTS
         uses: actions/setup-node@v3
         with:
           node-version-file: '.nvmrc'
           cache: 'pnpm'
+
       - name: Get pnpm store directory
         id: pnpm-cache
         shell: bash
@@ -37,29 +59,27 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pnpm-store-
 
+      - uses: nrwl/nx-set-shas@v4
+        with:
+          main-branch-name: master
+
       - name: Install dependencies
         run: pnpm install
 
       - name: Run type check
-        run: pnpm build:packages && pnpm build:playground
-        env:
-          NODE_OPTIONS: --max-old-space-size=16384
+        run: pnpm test:type
 
-      - name: Run ESLint
-        # ESLint will save the cache files on cwd by default,
-        # so the lint command uses node_modules for caching.
-        # Refs: https://eslint.org/docs/latest/user-guide/command-line-interface#--cache-location
-        # By using eslint-plugin-prettier, eslint will lint the prettier rules as well.
+      - name: Run build
+        run: pnpm build:packages
+
+      - name: Run eslint
         run: pnpm lint
 
-      - name: Run lit-lint
-        run: pnpm lit-lint
+      - name: Run lit lint
+        run: pnpm lint:lit
 
       - name: Run circular imports detect
-        run: pnpm circular
+        run: pnpm lint:circular
 
-      - uses: actions/cache@v3
-        id: restore-build
-        with:
-          path: ./*
-          key: ${{ github.sha }}-${{ github.run_number }}
+      - name: Node Environment Test
+        run: pnpm test:node

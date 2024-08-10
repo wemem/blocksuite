@@ -18,6 +18,7 @@ export const styles = css`
     padding: 12px 8px;
     display: flex;
     flex-direction: column;
+    overflow-y: auto;
 
     background: var(--affine-background-overlay-panel-color);
     box-shadow: var(--affine-shadow-2);
@@ -40,6 +41,11 @@ export const styles = css`
     margin: 6px 12px;
     height: 1px;
     background: var(--affine-border-color);
+  }
+
+  .group icon-button svg {
+    width: 20px;
+    height: 20px;
   }
 
   ${scrollbarStyle('.linked-doc-popover .group')}

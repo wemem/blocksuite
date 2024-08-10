@@ -1,6 +1,6 @@
 import { baseTheme } from '@toeverything/theme';
-import { css, html, LitElement, nothing, unsafeCSS } from 'lit';
-import { customElement, property } from 'lit/decorators.js';
+import { LitElement, css, html, nothing, unsafeCSS } from 'lit';
+import { customElement, property, query } from 'lit/decorators.js';
 
 /**
  * Default size is 32px, you can override it by setting `size` property.
@@ -58,7 +58,7 @@ export class IconButton extends LitElement {
     }
 
     /* You can add a 'hover' attribute to the button to show the hover style */
-    :host([hover]) {
+    :host([hover='true']) {
       background: var(--affine-hover-color);
     }
     :host([hover='false']) {
@@ -78,11 +78,12 @@ export class IconButton extends LitElement {
       display: flex;
       flex-direction: column;
       overflow: hidden;
-      white-space: nowrap;
-      text-overflow: ellipsis;
     }
 
     :host .text {
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
       font-size: var(--affine-font-sm);
       line-height: var(--affine-line-height);
     }
@@ -94,12 +95,14 @@ export class IconButton extends LitElement {
         var(--textColor-textSecondaryColor, #8e8d91)
       );
       line-height: var(--affine-line-height);
+      white-space: nowrap;
       text-overflow: ellipsis;
       overflow: hidden;
       margin-top: -2px;
     }
 
     ::slotted(svg) {
+      flex-shrink: 0;
       color: var(--svg-icon-color);
     }
 
@@ -107,31 +110,6 @@ export class IconButton extends LitElement {
       margin-left: auto;
     }
   `;
-
-  @property()
-  accessor size: string | number | null = null;
-
-  @property()
-  accessor width: string | number | null = null;
-
-  @property()
-  accessor height: string | number | null = null;
-
-  @property()
-  accessor text: string | null = null;
-
-  @property()
-  accessor subText: string | null = null;
-
-  @property({ attribute: true, type: Boolean })
-  accessor active: boolean = false;
-
-  @property({ attribute: true, type: Boolean })
-  accessor hover: boolean | undefined = undefined;
-
-  // Do not add `{ attribute: false }` option here, otherwise the `disabled` styles will not work
-  @property({ attribute: true, type: Boolean })
-  accessor disabled: boolean | undefined = undefined;
 
   constructor() {
     super();
@@ -161,12 +139,11 @@ export class IconButton extends LitElement {
   override connectedCallback() {
     super.connectedCallback();
     this.tabIndex = 0;
+    this.role = 'button';
 
     const DEFAULT_SIZE = '28px';
     if (this.size && (this.width || this.height)) {
-      throw new Error(
-        'Cannot set both size and width/height on an icon-button'
-      );
+      return;
     }
 
     let width = this.width ?? DEFAULT_SIZE;
@@ -218,6 +195,34 @@ export class IconButton extends LitElement {
       ${textContainer}
       <slot name="suffix"></slot>`;
   }
+
+  @property({ attribute: true, type: Boolean })
+  accessor active: boolean = false;
+
+  // Do not add `{ attribute: false }` option here, otherwise the `disabled` styles will not work
+  @property({ attribute: true, type: Boolean })
+  accessor disabled: boolean | undefined = undefined;
+
+  @property()
+  accessor height: string | number | null = null;
+
+  @property({ attribute: true, type: String })
+  accessor hover: 'true' | 'false' | undefined = undefined;
+
+  @property()
+  accessor size: string | number | null = null;
+
+  @property()
+  accessor subText: string | null = null;
+
+  @property()
+  accessor text: string | null = null;
+
+  @query('.text-container .text')
+  accessor textElement: HTMLDivElement | null = null;
+
+  @property()
+  accessor width: string | number | null = null;
 }
 
 declare global {

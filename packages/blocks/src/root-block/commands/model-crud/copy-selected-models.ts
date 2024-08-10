@@ -1,44 +1,25 @@
 import type { Command } from '@blocksuite/block-std';
-import { assertExists } from '@blocksuite/global/utils';
-import { type DraftModel, toDraftModel } from '@blocksuite/store';
+
 import { Slice } from '@blocksuite/store';
 
-export const copySelectedModelsCommand: Command<'selectedModels' | 'onCopy'> = (
+export const copySelectedModelsCommand: Command<'draftedModels' | 'onCopy'> = (
   ctx,
   next
 ) => {
-  const models = ctx.selectedModels;
-  assertExists(
-    models,
-    '`selectedModels` is required, you need to use `getSelectedModels` command before adding this command to the pipeline.'
-  );
+  const models = ctx.draftedModels;
+  if (!models) {
+    console.error(
+      '`draftedModels` is required, you need to use `draftSelectedModels` command before adding this command to the pipeline.'
+    );
+    return;
+  }
 
-  const drafts = models.map(toDraftModel);
+  models
+    .then(models => {
+      const slice = Slice.fromModels(ctx.std.doc, models);
 
-  const traverse = (model: DraftModel) => {
-    const isDatabase = model.flavour === 'affine:database';
-    const children = isDatabase
-      ? model.children
-      : model.children.filter(child => {
-          const idx = drafts.findIndex(m => m.id === child.id);
-          return idx >= 0;
-        });
-
-    children.forEach(child => {
-      const idx = drafts.findIndex(m => m.id === child.id);
-      if (idx >= 0) {
-        drafts.splice(idx, 1);
-      }
-      traverse(child);
-    });
-    model.children = children;
-  };
-  drafts.forEach(traverse);
-
-  const slice = Slice.fromModels(ctx.std.doc, drafts);
-
-  ctx.std.clipboard
-    .copy(slice)
+      return ctx.std.clipboard.copy(slice);
+    })
     .then(() => ctx.onCopy?.())
     .catch(console.error);
   return next();

@@ -1,12 +1,13 @@
 import type {
+  BaseSelection,
   BlockSelection,
-  EditorHost,
   UIEventHandler,
   UIEventStateContext,
 } from '@blocksuite/block-std';
-import type { BlockElement } from '@blocksuite/block-std';
-import { assertExists } from '@blocksuite/global/utils';
+import type { BlockComponent } from '@blocksuite/block-std';
 import type { ReactiveController, ReactiveControllerHost } from 'lit';
+
+import { assertExists } from '@blocksuite/global/utils';
 
 import { moveBlockConfigs } from '../_common/configs/move-block.js';
 import { quickActionConfig } from '../_common/configs/quick-action/config.js';
@@ -16,24 +17,93 @@ import { onModelElementUpdated } from '../root-block/utils/callback.js';
 import { ensureBlockInContainer } from './utils.js';
 
 export class KeymapController implements ReactiveController {
-  private get _std() {
-    return this.host.std;
-  }
-
   private _anchorSel: BlockSelection | null = null;
 
-  private _focusBlock: BlockElement | null = null;
-
-  host: ReactiveControllerHost & BlockElement;
-
-  constructor(host: ReactiveControllerHost & BlockElement) {
-    (this.host = host).addController(this);
-  }
-
-  private _reset = () => {
-    this._anchorSel = null;
-    this._focusBlock = null;
+  private _bindMoveBlockHotKey = () => {
+    moveBlockConfigs.forEach(config => {
+      config.hotkey.forEach(key => {
+        this.host.bindHotKey({
+          [key]: ctx => {
+            ctx.get('defaultState').event.preventDefault();
+            return config.action(this.host);
+          },
+        });
+      });
+    });
   };
+
+  private _bindQuickActionHotKey = () => {
+    quickActionConfig.forEach(config => {
+      if (!config.hotkey) return;
+      this.host.bindHotKey({
+        [config.hotkey]: ctx => {
+          if (!config.showWhen(this.host.host)) return;
+
+          ctx.get('defaultState').event.preventDefault();
+          config.action(this.host.host);
+        },
+      });
+    });
+  };
+
+  private _bindTextConversionHotKey = () => {
+    textConversionConfigs.forEach(item => {
+      if (!item.hotkey) return;
+
+      item.hotkey.forEach(key => {
+        this.host.bindHotKey({
+          [key]: ctx => {
+            ctx.get('defaultState').event.preventDefault();
+
+            const [result] = this._std.command
+              .chain()
+              .updateBlockType({
+                flavour: item.flavour,
+                props: {
+                  type: item.type,
+                },
+              })
+              .inline((ctx, next) => {
+                const newModels = ctx.updatedBlocks;
+                const host = ctx.std.host;
+                assertExists(newModels);
+                assertExists(host);
+
+                if (item.flavour !== 'affine:code') {
+                  return;
+                }
+
+                const [codeModel] = newModels;
+                onModelElementUpdated(host, codeModel, () => {
+                  const codeElement = this._std.view.viewFromPath(
+                    'block',
+                    buildPath(codeModel)
+                  );
+                  assertExists(codeElement);
+                  this._std.selection.setGroup('note', [
+                    this._std.selection.create('text', {
+                      from: {
+                        blockId: codeElement.blockId,
+                        index: 0,
+                        length: codeModel.text?.length ?? 0,
+                      },
+                      to: null,
+                    }),
+                  ]);
+                }).catch(console.error);
+
+                next();
+              })
+              .run();
+
+            return result;
+          },
+        });
+      });
+    });
+  };
+
+  private _focusBlock: BlockComponent | null = null;
 
   private _onArrowDown = (ctx: UIEventStateContext) => {
     const event = ctx.get('defaultState').event;
@@ -222,18 +292,6 @@ export class KeymapController implements ReactiveController {
     return result;
   };
 
-  private _onShiftArrowDown = () => {
-    const [result] = this._std.command
-      .chain()
-      .try(cmd => [
-        // block selection
-        this._onBlockShiftDown(cmd),
-      ])
-      .run();
-
-    return result;
-  };
-
   private _onBlockShiftDown = (cmd: BlockSuite.CommandChain) => {
     return cmd
       .getBlockSelections()
@@ -271,18 +329,6 @@ export class KeymapController implements ReactiveController {
       .selectBlocksBetween({ tail: true });
   };
 
-  private _onShiftArrowUp = () => {
-    const [result] = this._std.command
-      .chain()
-      .try(cmd => [
-        // block selection
-        this._onBlockShiftUp(cmd),
-      ])
-      .run();
-
-    return result;
-  };
-
   private _onBlockShiftUp = (cmd: BlockSuite.CommandChain) => {
     return cmd
       .getBlockSelections()
@@ -317,27 +363,6 @@ export class KeymapController implements ReactiveController {
         });
       })
       .selectBlocksBetween({ tail: false });
-  };
-
-  private _onEsc = () => {
-    const [result] = this._std.command
-      .chain()
-      .getBlockSelections()
-      .inline((ctx, next) => {
-        const blockSelection = ctx.currentBlockSelections?.at(-1);
-        if (!blockSelection) {
-          return;
-        }
-
-        ctx.std.selection.update(selList => {
-          return selList.filter(sel => !sel.is('block'));
-        });
-
-        return next();
-      })
-      .run();
-
-    return result;
   };
 
   private _onEnter = (ctx: UIEventStateContext) => {
@@ -387,133 +412,75 @@ export class KeymapController implements ReactiveController {
     return result;
   };
 
+  private _onEsc = () => {
+    const [result] = this._std.command
+      .chain()
+      .getBlockSelections()
+      .inline((ctx, next) => {
+        const blockSelection = ctx.currentBlockSelections?.at(-1);
+        if (!blockSelection) {
+          return;
+        }
+
+        ctx.std.selection.update(selList => {
+          return selList.filter(sel => !sel.is('block'));
+        });
+
+        return next();
+      })
+      .run();
+
+    return result;
+  };
+
   private _onSelectAll: UIEventHandler = ctx => {
     ctx.get('defaultState').event.preventDefault();
-    const view = this._std.view;
     const selection = this._std.selection;
     // eslint-disable-next-line unicorn/prefer-array-some
     if (!selection.find('block')) {
       return;
     }
-    const blocks: BlockSelection[] = [];
-    view.walkThrough(nodeView => {
-      if (
-        // Remove children blocks, only select the most top level blocks.
-        !blocks
-          .map(block => this._std.doc.getBlockById(block.blockId))
-          .filter(b => !!b)
-          .map(b => buildPath(b))
-          .reduce(
-            (acc, cur) =>
-              // check whether cur is a sub list of nodeView.path
-              acc || cur.every(path => nodeView.path.includes(path)),
-            false
-          )
-      ) {
-        blocks.push(
-          selection.create('block', {
-            blockId: nodeView.blockId,
-          })
-        );
-      }
-      return null;
-    }, this.host.blockId);
+    const children = this.host.model.children;
+    const blocks: BlockSelection[] = children.map(child => {
+      return selection.create('block', {
+        blockId: child.id,
+      });
+    });
     selection.update(selList => {
-      return selList.filter(sel => !sel.is('block')).concat(blocks);
+      return selList
+        .filter<BaseSelection>(sel => !sel.is('block'))
+        .concat(blocks);
     });
   };
 
-  private _bindQuickActionHotKey = () => {
-    quickActionConfig.forEach(config => {
-      if (!config.hotkey) return;
-      this.host.bindHotKey({
-        [config.hotkey]: ctx => {
-          if (!config.showWhen(this.host.host)) return;
+  private _onShiftArrowDown = () => {
+    const [result] = this._std.command
+      .chain()
+      .try(cmd => [
+        // block selection
+        this._onBlockShiftDown(cmd),
+      ])
+      .run();
 
-          ctx.get('defaultState').event.preventDefault();
-          config.action(this.host.host);
-        },
-      });
-    });
+    return result;
   };
 
-  private _bindTextConversionHotKey = () => {
-    textConversionConfigs.forEach(item => {
-      if (!item.hotkey) return;
+  private _onShiftArrowUp = () => {
+    const [result] = this._std.command
+      .chain()
+      .try(cmd => [
+        // block selection
+        this._onBlockShiftUp(cmd),
+      ])
+      .run();
 
-      item.hotkey.forEach(key => {
-        this.host.bindHotKey({
-          [key]: ctx => {
-            ctx.get('defaultState').event.preventDefault();
-
-            const [result] = this._std.command
-              .chain()
-              .updateBlockType({
-                flavour: item.flavour,
-                props: {
-                  type: item.type,
-                },
-              })
-              .inline((ctx, next) => {
-                const newModels = ctx.updatedBlocks;
-                const host = ctx.std.host as EditorHost;
-                assertExists(newModels);
-                assertExists(host);
-
-                if (item.flavour !== 'affine:code') {
-                  return;
-                }
-
-                const [codeModel] = newModels;
-                onModelElementUpdated(host, codeModel, () => {
-                  const codeElement = this._std.view.viewFromPath(
-                    'block',
-                    buildPath(codeModel)
-                  );
-                  assertExists(codeElement);
-                  this._std.selection.setGroup('note', [
-                    this._std.selection.create('text', {
-                      from: {
-                        blockId: codeElement.blockId,
-                        index: 0,
-                        length: codeModel.text?.length ?? 0,
-                      },
-                      to: null,
-                    }),
-                  ]);
-                }).catch(console.error);
-
-                next();
-              })
-              .run();
-
-            return result;
-          },
-        });
-      });
-    });
+    return result;
   };
 
-  private _bindMoveBlockHotKey = () => {
-    moveBlockConfigs.forEach(config => {
-      config.hotkey.forEach(key => {
-        this.host.bindHotKey({
-          [key]: ctx => {
-            ctx.get('defaultState').event.preventDefault();
-            return config.action(this.host);
-          },
-        });
-      });
-    });
+  private _reset = () => {
+    this._anchorSel = null;
+    this._focusBlock = null;
   };
-
-  hostConnected() {
-    this._reset();
-  }
-
-  hostDisconnected() {
-    this._reset();
-  }
 
   bind = () => {
     this.host.handleEvent('keyDown', ctx => {
@@ -538,4 +505,22 @@ export class KeymapController implements ReactiveController {
     this._bindTextConversionHotKey();
     this._bindMoveBlockHotKey();
   };
+
+  host: ReactiveControllerHost & BlockComponent;
+
+  constructor(host: ReactiveControllerHost & BlockComponent) {
+    (this.host = host).addController(this);
+  }
+
+  private get _std() {
+    return this.host.std;
+  }
+
+  hostConnected() {
+    this._reset();
+  }
+
+  hostDisconnected() {
+    this._reset();
+  }
 }

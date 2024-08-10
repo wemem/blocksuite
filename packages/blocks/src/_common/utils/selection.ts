@@ -1,14 +1,15 @@
 import type { EditorHost } from '@blocksuite/block-std';
-import { IS_FIREFOX } from '@blocksuite/global/env';
-import { assertExists } from '@blocksuite/global/utils';
 import type { InlineRange, VLine } from '@blocksuite/inline';
 import type { BlockModel } from '@blocksuite/store';
 
-import type { PageRootBlockComponent } from '../../root-block/page/page-root-block.js';
+import { IS_FIREFOX } from '@blocksuite/global/env';
+import { assertExists } from '@blocksuite/global/utils';
+
 import type { SelectionPosition } from '../types.js';
+
 import { matchFlavours } from './model.js';
 import {
-  asyncGetRichTextByModel,
+  asyncGetRichText,
   buildPath,
   getDocTitleInlineEditor,
   getPageRootByElement,
@@ -33,27 +34,32 @@ export async function asyncSetInlineRange(
   model: BlockModel,
   inlineRange: InlineRange
 ) {
-  const richText = await asyncGetRichTextByModel(editorHost, model);
+  const richText = await asyncGetRichText(editorHost, model.id);
   if (!richText) {
     return;
   }
 
   await richText.updateComplete;
   const inlineEditor = richText.inlineEditor;
-  assertExists(inlineEditor);
+  if (!inlineEditor) {
+    return;
+  }
   inlineEditor.setInlineRange(inlineRange);
 }
 
-export function asyncFocusRichText(
+export async function asyncFocusRichText(
   editorHost: EditorHost,
   id: string,
-  inlineRange: InlineRange = { index: 0, length: 0 }
+  offset: number = 0
 ) {
-  const doc = editorHost.doc;
-  const model = doc.getBlockById(id);
-  assertExists(model);
-  if (matchFlavours(model, ['affine:divider'])) return;
-  return asyncSetInlineRange(editorHost, model, inlineRange);
+  const selection = editorHost.std.selection;
+  selection.setGroup('note', [
+    selection.create('text', {
+      from: { blockId: id, index: offset, length: 0 },
+      to: null,
+    }),
+  ]);
+  await editorHost.updateComplete;
 }
 
 /**
@@ -166,10 +172,10 @@ function setNewTop(y: number, editableContainer: Element, zoom = 1) {
  * As the title is a text area, this function does not yet have support for `SelectionPosition`.
  */
 export function focusTitle(editorHost: EditorHost, index = Infinity, len = 0) {
-  // TODO support SelectionPosition
-
   const titleInlineEditor = getDocTitleInlineEditor(editorHost);
-  assertExists(titleInlineEditor);
+  if (!titleInlineEditor) {
+    return;
+  }
 
   if (index > titleInlineEditor.yText.length) {
     index = titleInlineEditor.yText.length;
@@ -227,18 +233,11 @@ export function focusBlockByModel(
   zoom = 1
 ) {
   if (matchFlavours(model, ['affine:note', 'affine:page'])) {
-    throw new Error("Can't focus note or doc!");
+    console.error("Can't focus note or doc!");
+    return;
   }
 
-  assertExists(model.doc.root);
-  const rootElement = editorHost.view.viewFromPath('block', [
-    model.doc.root.id,
-  ]) as PageRootBlockComponent;
-  assertExists(rootElement);
-  rootElement;
-
   const element = editorHost.view.viewFromPath('block', buildPath(model));
-  assertExists(element);
   const editableContainer = element?.querySelector('[contenteditable]');
   if (editableContainer) {
     focusRichText(editableContainer, position, zoom);
@@ -252,32 +251,12 @@ export function resetNativeSelection(range: Range | null) {
   range && selection.addRange(range);
 }
 
-/**
- * Return true if has native selection in the document.
- *
- * @example
- * ```ts
- * const isNativeSelection = hasNativeSelection();
- * if (isNativeSelection) {
- *   // do something
- * }
- * ```
- */
-export function hasNativeSelection() {
-  const selection = window.getSelection();
-  if (!selection) return false;
-
-  // The `selection.rangeCount` attribute must return 0
-  // if this is empty or either focus or anchor is not in the document tree,
-  // and must return 1 otherwise.
-  return !!selection.rangeCount;
-}
-
 export function getCurrentNativeRange(selection = window.getSelection()) {
   // When called on an <iframe> that is not displayed (e.g., where display: none is set) Firefox will return null
   // See https://developer.mozilla.org/en-US/docs/Web/API/Window/getSelection for more details
   if (!selection) {
-    throw new Error('Failed to get current range, selection is null');
+    console.error('Failed to get current range, selection is null');
+    return null;
   }
   if (selection.rangeCount === 0) {
     return null;

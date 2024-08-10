@@ -1,31 +1,24 @@
-import './ai-sub-item-list.js';
-
-import type { EditorHost } from '@blocksuite/block-std';
+import { EditorHost } from '@blocksuite/block-std';
 import { WithDisposable } from '@blocksuite/block-std';
-import { css, html, LitElement, nothing } from 'lit';
+import { PropTypes, requiredProperties } from '@blocksuite/block-std';
+import { LitElement, css, html, nothing } from 'lit';
 import { customElement, property, query } from 'lit/decorators.js';
 
-import { ArrowRightIcon, EnterIcon } from '../../icons/ai.js';
-import { menuItemStyles } from './styles.js';
 import type { AIItemConfig } from './types.js';
 
+import { ArrowRightIcon, EnterIcon } from '../../icons/ai.js';
+import './ai-sub-item-list.js';
+import { menuItemStyles } from './styles.js';
+
+@requiredProperties({
+  host: PropTypes.instanceOf(EditorHost),
+  item: PropTypes.object,
+})
 @customElement('ai-item')
 export class AIItem extends WithDisposable(LitElement) {
   static override styles = css`
     ${menuItemStyles}
   `;
-
-  @property({ attribute: false })
-  accessor item!: AIItemConfig;
-
-  @property({ attribute: false })
-  accessor host!: EditorHost;
-
-  @property({ attribute: false })
-  accessor onClick: (() => void) | undefined;
-
-  @query('.menu-item')
-  accessor menuItem!: HTMLDivElement;
 
   override render() {
     const { item } = this;
@@ -52,6 +45,18 @@ export class AIItem extends WithDisposable(LitElement) {
         : html`<span class="enter-icon">${EnterIcon}</span>`}
     </div>`;
   }
+
+  @property({ attribute: false })
+  accessor host!: EditorHost;
+
+  @property({ attribute: false })
+  accessor item!: AIItemConfig;
+
+  @query('.menu-item')
+  accessor menuItem: HTMLDivElement | null = null;
+
+  @property({ attribute: false })
+  accessor onClick: (() => void) | undefined;
 }
 
 declare global {

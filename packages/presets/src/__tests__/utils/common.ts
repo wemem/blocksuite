@@ -1,3 +1,5 @@
+import type { Point } from '@blocksuite/global/utils';
+
 export function wait(time: number = 0) {
   return new Promise(resolve => {
     requestAnimationFrame(() => {
@@ -21,6 +23,8 @@ export function click(target: HTMLElement, position: { x: number; y: number }) {
       clientX,
       clientY,
       bubbles: true,
+      pointerId: 1,
+      isPrimary: true,
     })
   );
   target.dispatchEvent(
@@ -28,6 +32,8 @@ export function click(target: HTMLElement, position: { x: number; y: number }) {
       clientX,
       clientY,
       bubbles: true,
+      pointerId: 1,
+      isPrimary: true,
     })
   );
   target.dispatchEvent(
@@ -39,6 +45,18 @@ export function click(target: HTMLElement, position: { x: number; y: number }) {
   );
 }
 
+type PointerOptions = {
+  isPrimary?: boolean;
+  pointerId?: number;
+  pointerType?: string;
+};
+
+const defaultPointerOptions: PointerOptions = {
+  isPrimary: true,
+  pointerId: 1,
+  pointerType: 'mouse',
+};
+
 /**
  * simulate pointerdown event
  * @param target
@@ -46,7 +64,8 @@ export function click(target: HTMLElement, position: { x: number; y: number }) {
  */
 export function pointerdown(
   target: HTMLElement,
-  position: { x: number; y: number }
+  position: { x: number; y: number },
+  options: PointerOptions = defaultPointerOptions
 ) {
   const element = target.getBoundingClientRect();
   const clientX = element.x + position.x;
@@ -57,6 +76,7 @@ export function pointerdown(
       clientX,
       clientY,
       bubbles: true,
+      ...options,
     })
   );
 }
@@ -68,7 +88,8 @@ export function pointerdown(
  */
 export function pointerup(
   target: HTMLElement,
-  position: { x: number; y: number }
+  position: { x: number; y: number },
+  options: PointerOptions = defaultPointerOptions
 ) {
   const element = target.getBoundingClientRect();
   const clientX = element.x + position.x;
@@ -79,6 +100,7 @@ export function pointerup(
       clientX,
       clientY,
       bubbles: true,
+      ...options,
     })
   );
 }
@@ -90,7 +112,8 @@ export function pointerup(
  */
 export function pointermove(
   target: HTMLElement,
-  position: { x: number; y: number }
+  position: { x: number; y: number },
+  options: PointerOptions = defaultPointerOptions
 ) {
   const element = target.getBoundingClientRect();
   const clientX = element.x + position.x;
@@ -101,6 +124,7 @@ export function pointermove(
       clientX,
       clientY,
       bubbles: true,
+      ...options,
     })
   );
 }
@@ -128,4 +152,51 @@ export function drag(
 
   pointermove(target, end);
   pointerup(target, end);
+}
+
+export function multiTouchDown(target: Element, points: Point[]) {
+  points.forEach((point, index) => {
+    pointerdown(target as HTMLElement, point, {
+      isPrimary: index === 0,
+      pointerId: index,
+      pointerType: 'touch',
+    });
+  });
+}
+
+export function multiTouchMove(
+  target: Element,
+  from: Point[],
+  to: Point[],
+  step = 5
+) {
+  if (from.length !== to.length) {
+    throw new Error('from and to should have the same length');
+  }
+
+  if (step !== 0) {
+    for (const [i] of Array.from({ length: step }).entries()) {
+      const stepPoints = from.map((point, index) => ({
+        x: point.x + ((to[index].x - point.x) / step) * (i + 1),
+        y: point.y + ((to[index].y - point.y) / step) * (i + 1),
+      }));
+      from.forEach((_, index) => {
+        pointermove(target as HTMLElement, stepPoints[index], {
+          isPrimary: index === 0,
+          pointerId: index,
+          pointerType: 'touch',
+        });
+      });
+    }
+  }
+}
+
+export function multiTouchUp(target: Element, points: Point[]) {
+  points.forEach((point, index) => {
+    pointerup(target as HTMLElement, point, {
+      isPrimary: index === 0,
+      pointerId: index,
+      pointerType: 'touch',
+    });
+  });
 }

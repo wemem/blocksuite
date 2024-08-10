@@ -2,6 +2,7 @@ import type {
   GroupElementModel,
   MindmapElementModel,
 } from '@blocksuite/blocks';
+
 import {
   type EdgelessRootBlockComponent,
   NoteDisplayMode,
@@ -180,6 +181,17 @@ describe('group', () => {
     doc.undo();
     await wait();
     assertInitial();
+  });
+
+  test('empty group should have all zero xywh', () => {
+    const map = new DocCollection.Y.Map<boolean>();
+    const groupId = service.addElement('group', { children: map });
+    const group = service.getElementById(groupId) as GroupElementModel;
+
+    expect(group.x).toBe(0);
+    expect(group.y).toBe(0);
+    expect(group.w).toBe(0);
+    expect(group.h).toBe(0);
   });
 });
 

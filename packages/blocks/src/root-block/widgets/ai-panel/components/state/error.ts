@@ -1,21 +1,34 @@
-import '../finish-tip.js';
-
 import type { EditorHost } from '@blocksuite/block-std';
+
 import { WithDisposable } from '@blocksuite/block-std';
 import { baseTheme } from '@toeverything/theme';
-import { css, html, LitElement, nothing, unsafeCSS } from 'lit';
+import { LitElement, css, html, nothing, unsafeCSS } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
 import { choose } from 'lit/directives/choose.js';
+
+import type { AIPanelErrorConfig, CopyConfig } from '../../type.js';
 
 import {
   AIErrorType,
   type AIItemGroupConfig,
 } from '../../../../../_common/components/index.js';
-import type { AIPanelErrorConfig, CopyConfig } from '../../type.js';
 import { filterAIItemGroup } from '../../utils.js';
+import '../finish-tip.js';
 
 @customElement('ai-panel-error')
 export class AIPanelError extends WithDisposable(LitElement) {
+  private _getResponseGroup = () => {
+    let responseGroup: AIItemGroupConfig[] = [];
+    const errorType = this.config.error?.type;
+    if (errorType && errorType !== AIErrorType.GeneralNetworkError) {
+      return responseGroup;
+    }
+
+    responseGroup = filterAIItemGroup(this.host, this.config.responses);
+
+    return responseGroup;
+  };
+
   static override styles = css`
     :host {
       width: 100%;
@@ -130,30 +143,6 @@ export class AIPanelError extends WithDisposable(LitElement) {
     }
   `;
 
-  @property({ attribute: false })
-  accessor config!: AIPanelErrorConfig;
-
-  @property({ attribute: false })
-  accessor copy: CopyConfig | undefined = undefined;
-
-  @property({ attribute: false })
-  accessor host!: EditorHost;
-
-  @property({ attribute: false })
-  accessor withAnswer = false;
-
-  private _getResponseGroup = () => {
-    let responseGroup: AIItemGroupConfig[] = [];
-    const errorType = this.config.error?.type;
-    if (errorType && errorType !== AIErrorType.GeneralNetworkError) {
-      return responseGroup;
-    }
-
-    responseGroup = filterAIItemGroup(this.host, this.config.responses);
-
-    return responseGroup;
-  };
-
   override render() {
     const responseGroup = this._getResponseGroup();
     const errorTemplate = choose(
@@ -195,15 +184,43 @@ export class AIPanelError extends WithDisposable(LitElement) {
         ],
       ],
       // default error handler
-      () => html`
-        <div class="error-info">
-          An error occurred. Please try again later. If this issue persists,
-          please let us know at
-          <a href="mailto:support@toeverything.info">
-            support@toeverything.info
-          </a>
-        </div>
-      `
+      () => {
+        const tip = this.config.error?.message;
+        const error = tip
+          ? html`<a class="tip" href="#" data-tip="${tip}"
+              >An error occurred</a
+            >`
+          : 'An error occurred';
+        return html`
+          <style>
+            .tip {
+              position: relative;
+              cursor: pointer;
+            }
+
+            .tip:hover::after {
+              content: attr(data-tip);
+              position: absolute;
+              left: 0;
+              top: 20px;
+              background-color: black;
+              white-space: nowrap;
+              color: white;
+              padding: 5px 10px;
+              border-radius: 5px;
+              z-index: 1000;
+              white-space: pre;
+            }
+          </style>
+          <div class="error-info">
+            ${error}. Please try again later. If this issue persists, please let
+            us know at
+            <a href="mailto:support@toeverything.info">
+              support@toeverything.info
+            </a>
+          </div>
+        `;
+      }
     );
 
     return html`
@@ -215,7 +232,10 @@ export class AIPanelError extends WithDisposable(LitElement) {
         ${errorTemplate}
       </div>
       ${this.withAnswer
-        ? html`<ai-finish-tip .copy=${this.copy}></ai-finish-tip>`
+        ? html`<ai-finish-tip
+            .copy=${this.copy}
+            .host=${this.host}
+          ></ai-finish-tip>`
         : nothing}
       ${responseGroup.length > 0
         ? html`
@@ -226,7 +246,10 @@ export class AIPanelError extends WithDisposable(LitElement) {
                   ? html`<ai-panel-divider></ai-panel-divider>`
                   : nothing}
                 <div class="response-list-container">
-                  <ai-item-list .groups=${[group]}></ai-item-list>
+                  <ai-item-list
+                    .host=${this.host}
+                    .groups=${[group]}
+                  ></ai-item-list>
                 </div>
               `
             )}
@@ -234,6 +257,18 @@ export class AIPanelError extends WithDisposable(LitElement) {
         : nothing}
     `;
   }
+
+  @property({ attribute: false })
+  accessor config!: AIPanelErrorConfig;
+
+  @property({ attribute: false })
+  accessor copy: CopyConfig | undefined = undefined;
+
+  @property({ attribute: false })
+  accessor host!: EditorHost;
+
+  @property({ attribute: false })
+  accessor withAnswer = false;
 }
 
 declare global {
