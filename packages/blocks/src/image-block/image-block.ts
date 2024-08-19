@@ -218,6 +218,9 @@ export class ImageBlockComponent extends CaptionedBlockComponent<
   @state()
   accessor lastSourceId!: string;
 
+  @state()
+  accessor lastSourceUrl!: string;
+
   @property({ attribute: false })
   accessor loading = false;
 
