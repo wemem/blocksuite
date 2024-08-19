@@ -109,7 +109,6 @@ export async function fetchImageBlob(block: ImageBlockComponent) {
       block.blobUrl = block.model.sourceUrl;
       block.lastSourceUrl = block.model.sourceUrl;
       block.error = false;
-      console.log('block', block);
       return;
     }
     if (block.model.sourceId !== block.lastSourceId || !block.blobUrl) {
