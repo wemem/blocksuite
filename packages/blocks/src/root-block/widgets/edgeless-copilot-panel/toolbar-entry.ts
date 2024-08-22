@@ -49,9 +49,13 @@ export class EdgelessCopilotToolbarEntry extends WithDisposable(LitElement) {
       class="copilot-icon-button"
       @click=${this._showCopilotPanel}
     >
-      ${AIStarIcon} <span class="label medium">Ask AI</span>
+      ${AIStarIcon}
+      <span class="label medium">${this.buttonText || 'Ask AI'}</span>
     </edgeless-tool-icon-button>`;
   }
+
+  @property({ attribute: false })
+  accessor buttonText: string = '';
 
   @property({ attribute: false })
   accessor edgeless!: EdgelessRootBlockComponent;
