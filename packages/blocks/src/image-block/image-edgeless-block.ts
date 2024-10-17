@@ -143,6 +143,9 @@ export class ImageEdgelessBlockComponent extends GfxBlockComponent<
   @state()
   accessor lastSourceId!: string;
 
+  @state()
+  accessor lastSourceUrl!: string;
+
   @property({ attribute: false })
   accessor loading = false;
 
