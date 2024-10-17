@@ -11,11 +11,9 @@ import type {
 } from '@blocksuite/blocks';
 import type { DeltaInsert } from '@blocksuite/inline';
 
-import { WithDisposable } from '@blocksuite/block-std';
-import { noop } from '@blocksuite/global/utils';
-import { SignalWatcher } from '@lit-labs/preact-signals';
-import { LitElement, css, html, nothing } from 'lit';
-import { customElement, property } from 'lit/decorators.js';
+import { noop, SignalWatcher, WithDisposable } from '@blocksuite/global/utils';
+import { css, html, LitElement, nothing } from 'lit';
+import { property } from 'lit/decorators.js';
 
 import { SmallLinkedDocIcon } from '../../_common/icons.js';
 import { placeholderMap, previewIconMap } from '../config.js';
@@ -58,8 +56,8 @@ const styles = css`
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 24px;
-    height: 24px;
+    width: 22px;
+    height: 22px;
     box-sizing: border-box;
     padding: 4px;
     background: var(--affine-background-secondary-color);
@@ -78,8 +76,8 @@ const styles = css`
     flex: 1;
 
     font-size: var(--affine-font-sm);
-    line-height: 24px;
-    height: 24px;
+    line-height: 22px;
+    height: 22px;
   }
 
   .text.general,
@@ -158,7 +156,6 @@ const styles = css`
 
 export const AFFINE_OUTLINE_BLOCK_PREVIEW = 'affine-outline-block-preview';
 
-@customElement(AFFINE_OUTLINE_BLOCK_PREVIEW)
 export class OutlineBlockPreview extends SignalWatcher(
   WithDisposable(LitElement)
 ) {

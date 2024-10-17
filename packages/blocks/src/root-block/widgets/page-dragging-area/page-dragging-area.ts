@@ -1,16 +1,18 @@
-import type { PointerEventState } from '@blocksuite/block-std';
+import type { RootBlockModel } from '@blocksuite/affine-model';
 
+import {
+  getScrollContainer,
+  matchFlavours,
+} from '@blocksuite/affine-shared/utils';
+import { BLOCK_ID_ATTR, type PointerEventState } from '@blocksuite/block-std';
 import { BlockComponent, WidgetComponent } from '@blocksuite/block-std';
 import { assertInstanceOf } from '@blocksuite/global/utils';
 import { html, nothing } from 'lit';
-import { customElement, state } from 'lit/decorators.js';
+import { state } from 'lit/decorators.js';
 import { styleMap } from 'lit/directives/style-map.js';
 
-import type { PageRootBlockComponent, RootBlockModel } from '../../index.js';
+import type { PageRootBlockComponent } from '../../index.js';
 
-import { BLOCK_ID_ATTR } from '../../../_common/consts.js';
-import { matchFlavours } from '../../../_common/utils/model.js';
-import { getScrollContainer } from '../../../_common/utils/scroll-container.js';
 import { autoScroll } from '../../text-selection/utils.js';
 
 type Rect = {
@@ -28,11 +30,12 @@ type BlockInfo = {
 export const AFFINE_PAGE_DRAGGING_AREA_WIDGET =
   'affine-page-dragging-area-widget';
 
-@customElement(AFFINE_PAGE_DRAGGING_AREA_WIDGET)
 export class AffinePageDraggingAreaWidget extends WidgetComponent<
   RootBlockModel,
   PageRootBlockComponent
 > {
+  static excludeFlavours: string[] = ['affine:note', 'affine:surface'];
+
   private _dragging = false;
 
   private _initialContainerOffset: {
@@ -119,8 +122,6 @@ export class AffinePageDraggingAreaWidget extends WidgetComponent<
     }
   };
 
-  static excludeFlavours: string[] = ['affine:note', 'affine:surface'];
-
   private get _allBlocksWithRect(): BlockInfo[] {
     if (!this._viewport) {
       return [];
@@ -163,6 +164,16 @@ export class AffinePageDraggingAreaWidget extends WidgetComponent<
     });
   }
 
+  private get _viewport() {
+    const rootComponent = this.block;
+    if (!rootComponent) return;
+    return rootComponent.viewport;
+  }
+
+  private get scrollContainer() {
+    return getScrollContainer(this.block);
+  }
+
   private _clearRaf() {
     if (this._rafID) {
       cancelAnimationFrame(this._rafID);
@@ -181,16 +192,6 @@ export class AffinePageDraggingAreaWidget extends WidgetComponent<
     });
 
     this.host.selection.setGroup('note', selections);
-  }
-
-  private get _viewport() {
-    const rootComponent = this.block;
-    if (!rootComponent) return;
-    return rootComponent.viewport;
-  }
-
-  private get scrollContainer() {
-    return getScrollContainer(this.block);
   }
 
   override connectedCallback() {

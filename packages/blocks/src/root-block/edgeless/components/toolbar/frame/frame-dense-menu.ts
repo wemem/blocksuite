@@ -1,9 +1,10 @@
-import type { Menu } from '../../../../../_common/components/index.js';
+import type { Menu } from '@blocksuite/affine-components/context-menu';
+
+import { FrameIcon } from '@blocksuite/affine-components/icons';
+
 import type { DenseMenuBuilder } from '../common/type.js';
 
-import { FrameIcon } from '../../../../../_common/icons/edgeless.js';
 import { FrameConfig } from './config.js';
-import { createFrame } from './service.js';
 
 export const buildFrameDenseMenu: DenseMenuBuilder = edgeless => ({
   type: 'sub-menu',
@@ -23,7 +24,10 @@ export const buildFrameDenseMenu: DenseMenuBuilder = edgeless => ({
           ({
             type: 'action',
             name: `Slide ${config.name}`,
-            select: () => createFrame(edgeless, config.wh),
+            select: () => {
+              edgeless.tools.setEdgelessTool({ type: 'default' });
+              edgeless.service.frame.createFrameOnViewportCenter(config.wh);
+            },
           }) satisfies Menu
       ),
     ],

@@ -1,27 +1,30 @@
-/* eslint-disable @typescript-eslint/no-restricted-imports */
 import type { SerializedXYWH } from '@blocksuite/global/utils';
 import type { DeltaInsert } from '@blocksuite/inline/types';
-import type { AffineEditorContainer, CommentPanel } from '@blocksuite/presets';
 import type { SlDropdown } from '@shoelace-style/shoelace';
 import type { Pane } from 'tweakpane';
 
-import { type EditorHost, ShadowlessElement } from '@blocksuite/block-std';
+import { ShadowlessElement } from '@blocksuite/block-std';
 import {
   type AffineTextAttributes,
   ColorVariables,
+  defaultImageProxyMiddleware,
+  type DocMode,
+  DocModeProvider,
+  EdgelessRootService,
+  ExportManager,
   FontFamilyVariables,
   HtmlTransformer,
   MarkdownTransformer,
   NotionHtmlAdapter,
+  openFileOrFiles,
+  printToPdf,
   SizeVariables,
   StyleVariables,
-  type SurfaceBlockComponent,
+  toast,
   ZipTransformer,
-  defaultImageProxyMiddleware,
-  openFileOrFiles,
 } from '@blocksuite/blocks';
-import { assertExists } from '@blocksuite/global/utils';
-import { type DocCollection, Job, Text, Utils } from '@blocksuite/store';
+import { AffineEditorContainer, type CommentPanel } from '@blocksuite/presets';
+import { type DocCollection, Job, Text } from '@blocksuite/store';
 import '@shoelace-style/shoelace/dist/components/button/button.js';
 import '@shoelace-style/shoelace/dist/components/button-group/button-group.js';
 import '@shoelace-style/shoelace/dist/components/color-picker/color-picker.js';
@@ -42,7 +45,6 @@ import { css, html } from 'lit';
 import { customElement, property, query, state } from 'lit/decorators.js';
 import * as lz from 'lz-string';
 
-import type { CustomChatPanel } from './custom-chat-panel.js';
 import type { CustomFramePanel } from './custom-frame-panel.js';
 import type { CustomOutlinePanel } from './custom-outline-panel.js';
 import type { CustomOutlineViewer } from './custom-outline-viewer.js';
@@ -53,24 +55,9 @@ import type { SidePanel } from './side-panel.js';
 import './left-side-panel.js';
 import './side-panel.js';
 
-const basePath = import.meta.env.DEV
-  ? '/node_modules/@shoelace-style/shoelace/dist'
-  : 'https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.11.2/dist';
+const basePath =
+  'https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.11.2/dist';
 setBasePath(basePath);
-
-export function getSurfaceElementFromEditor(editorHost: EditorHost) {
-  const { doc } = editorHost;
-  const surfaceModel = doc.getBlockByFlavour('affine:surface')[0];
-  assertExists(surfaceModel);
-
-  const surfaceId = surfaceModel.id;
-  const surfaceElement = editorHost.querySelector(
-    `affine-surface[data-block-id="${surfaceId}"]`
-  ) as SurfaceBlockComponent;
-  assertExists(surfaceElement);
-
-  return surfaceElement;
-}
 
 const OTHER_CSS_VARIABLES = StyleVariables.filter(
   variable =>
@@ -161,14 +148,6 @@ function getDarkModeConfig(): boolean {
 
 @customElement('debug-menu')
 export class DebugMenu extends ShadowlessElement {
-  private _darkModeChange = (e: MediaQueryListEvent) => {
-    this._setThemeMode(!!e.matches);
-  };
-
-  private _showStyleDebugMenu = false;
-
-  private _styleMenu!: Pane;
-
   static override styles = css`
     :root {
       --sl-font-size-medium: var(--affine-font-xs);
@@ -179,6 +158,30 @@ export class DebugMenu extends ShadowlessElement {
       z-index: 1001 !important;
     }
   `;
+
+  private _darkModeChange = (e: MediaQueryListEvent) => {
+    this._setThemeMode(!!e.matches);
+  };
+
+  private _showStyleDebugMenu = false;
+
+  private _styleMenu!: Pane;
+
+  get doc() {
+    return this.editor.doc;
+  }
+
+  get mode() {
+    return this.editor.mode;
+  }
+
+  set mode(value: DocMode) {
+    this.editor.mode = value;
+  }
+
+  get rootService() {
+    return this.editor.std?.getService('affine:page');
+  }
 
   private _addNote() {
     const rootModel = this.doc.root;
@@ -212,11 +215,11 @@ export class DebugMenu extends ShadowlessElement {
   }
 
   private _exportPdf() {
-    this.rootService?.exportManager.exportPdf().catch(console.error);
+    this.editor.std.get(ExportManager).exportPdf().catch(console.error);
   }
 
   private _exportPng() {
-    this.rootService?.exportManager.exportPng().catch(console.error);
+    this.editor.std.get(ExportManager).exportPng().catch(console.error);
   }
 
   private async _exportSnapshot() {
@@ -311,6 +314,29 @@ export class DebugMenu extends ShadowlessElement {
     }, duration);
   }
 
+  private _present() {
+    if (!this.editor.std || !this.editor.host) return;
+    const rootService = this.editor.std.getService('affine:page');
+    if (!(rootService instanceof EdgelessRootService)) {
+      toast(
+        this.editor.host,
+        'The presentation mode is only available on edgeless mode.',
+        3000
+      );
+      return;
+    }
+
+    const edgelessRootService = rootService as EdgelessRootService;
+    edgelessRootService?.tool.setEdgelessTool({
+      type: 'frameNavigator',
+      mode: 'fit',
+    });
+  }
+
+  private _print() {
+    printToPdf().catch(console.error);
+  }
+
   private _setThemeMode(dark: boolean) {
     const html = document.querySelector('html');
 
@@ -342,25 +368,18 @@ export class DebugMenu extends ShadowlessElement {
     window.history.pushState({}, '', url);
   }
 
-  private _shareUrl() {
-    const base64 = Utils.encodeCollectionAsYjsUpdateV2(this.collection);
-    const url = new URL(window.location.toString());
-    url.searchParams.set('init', base64);
-    window.history.pushState({}, '', url);
-  }
-
   private _switchEditorMode() {
     if (!this.editor.host) return;
-    const { docModeService } = this.editor.host.spec.getService('affine:page');
-    this.mode = docModeService.toggleMode();
+    const newMode = this.mode === 'page' ? 'edgeless' : 'page';
+    const docModeService = this.editor.host.std.get(DocModeProvider);
+    if (docModeService) {
+      docModeService.setPrimaryMode(newMode, this.editor.doc.id);
+    }
+    this.mode = newMode;
   }
 
   private _switchOffsetMode() {
     this._hasOffset = !this._hasOffset;
-  }
-
-  private _toggleChatPanel() {
-    this.chatPanel.toggleDisplay();
   }
 
   private _toggleCommentPanel() {
@@ -377,6 +396,34 @@ export class DebugMenu extends ShadowlessElement {
 
   private _toggleFramePanel() {
     this.framePanel.toggleDisplay();
+  }
+
+  private _toggleMultipleEditors() {
+    const app = document.querySelector('#app');
+    if (app) {
+      const currentEditorCount = app.querySelectorAll(
+        'affine-editor-container'
+      ).length;
+      if (currentEditorCount === 1) {
+        // Add a second editor
+        const newEditor = document.createElement('affine-editor-container');
+        newEditor.doc = this.doc;
+        app.append(newEditor);
+        app.childNodes.forEach(child => {
+          if (child instanceof AffineEditorContainer) {
+            child.style.flex = '1';
+          }
+        });
+        (app as HTMLElement).style.display = 'flex';
+      } else {
+        // Remove the second editor
+        const secondEditor = app.querySelectorAll('affine-editor-container')[1];
+        if (secondEditor) {
+          secondEditor.remove();
+        }
+        (app as HTMLElement).style.display = 'block';
+      }
+    }
   }
 
   private _toggleOutlinePanel() {
@@ -454,9 +501,9 @@ export class DebugMenu extends ShadowlessElement {
       this._canRedo = this.doc.canRedo;
     });
 
-    this.editor.slots.editorModeSwitched.on(() => {
+    this.editor.std.get(DocModeProvider).onPrimaryModeChange(() => {
       this.requestUpdate();
-    });
+    }, this.editor.doc.id);
   }
 
   override render() {
@@ -536,6 +583,7 @@ export class DebugMenu extends ShadowlessElement {
               Test Operations
             </sl-button>
             <sl-menu>
+              <sl-menu-item @click="${this._print}">Print</sl-menu-item>
               <sl-menu-item @click="${this._exportMarkDown}">
                 Export Markdown
               </sl-menu-item>
@@ -556,9 +604,6 @@ export class DebugMenu extends ShadowlessElement {
               </sl-menu-item>
               <sl-menu-item @click="${this._importNotionHTML}">
                 Import Notion HTML
-              </sl-menu-item>
-              <sl-menu-item @click="${this._shareUrl}">
-                Share URL
               </sl-menu-item>
               <sl-menu-item @click="${this._toggleStyleDebugMenu}">
                 Toggle CSS Debug Menu
@@ -581,13 +626,13 @@ export class DebugMenu extends ShadowlessElement {
               <sl-menu-item @click="${this._toggleFramePanel}">
                 Toggle Frame Panel
               </sl-menu-item>
-              <sl-menu-item @click="${this._toggleChatPanel}">
-                Toggle Chat Panel
-              </sl-menu-item>
               <sl-menu-item @click="${this._toggleCommentPanel}">
                 Toggle Comment Panel
               </sl-menu-item>
               <sl-menu-item @click="${this._addNote}"> Add Note </sl-menu-item>
+              <sl-menu-item @click="${this._toggleMultipleEditors}">
+                Toggle Multiple Editors
+              </sl-menu-item>
             </sl-menu>
           </sl-dropdown>
 
@@ -612,6 +657,16 @@ export class DebugMenu extends ShadowlessElement {
               <sl-icon
                 name="${this._dark ? 'moon' : 'brightness-high'}"
               ></sl-icon>
+            </sl-button>
+          </sl-tooltip>
+
+          <sl-tooltip
+            content="Enter presentation mode"
+            placement="bottom"
+            hoist
+          >
+            <sl-button size="small" @click="${this._present}">
+              <sl-icon name="easel"></sl-icon>
             </sl-button>
           </sl-tooltip>
 
@@ -650,22 +705,6 @@ export class DebugMenu extends ShadowlessElement {
     super.update(changedProperties);
   }
 
-  get doc() {
-    return this.editor.doc;
-  }
-
-  get mode() {
-    return this.editor.mode;
-  }
-
-  set mode(value: 'page' | 'edgeless') {
-    this.editor.mode = value;
-  }
-
-  get rootService() {
-    return this.editor.host?.spec.getService('affine:page');
-  }
-
   @state()
   private accessor _canRedo = false;
 
@@ -680,9 +719,6 @@ export class DebugMenu extends ShadowlessElement {
 
   @query('#block-type-dropdown')
   accessor blockTypeDropdown!: SlDropdown;
-
-  @property({ attribute: false })
-  accessor chatPanel!: CustomChatPanel;
 
   @property({ attribute: false })
   accessor collection!: DocCollection;

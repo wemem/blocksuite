@@ -1,9 +1,11 @@
-import type { RichTextCell } from '@blocks/database-block/columns/rich-text/cell-renderer.js';
-import type { RichTextCellEditing } from '@blocks/database-block/columns/rich-text/cell-renderer.js';
-import type { ColumnType } from '@blocks/database-block/data-view/view/presets/table/types.js';
+import type {
+  RichTextCell,
+  RichTextCellEditing,
+} from '@blocks/database-block/properties/rich-text/cell-renderer.js';
 
+import { press } from '@inline/__tests__/utils.js';
 import { ZERO_WIDTH_SPACE } from '@inline/consts.js';
-import { type Locator, type Page, expect } from '@playwright/test';
+import { expect, type Locator, type Page } from '@playwright/test';
 
 import {
   pressEnter,
@@ -55,7 +57,7 @@ export async function performColumnAction(
 
 export async function switchColumnType(
   page: Page,
-  columnType: ColumnType,
+  columnType: string,
   columnIndex = 1
 ) {
   const { typeIcon } = await getDatabaseHeaderColumn(page, columnIndex);
@@ -64,7 +66,7 @@ export async function switchColumnType(
   await clickColumnType(page, columnType);
 }
 
-export function clickColumnType(page: Page, columnType: ColumnType) {
+export function clickColumnType(page: Page, columnType: string) {
   const typeMenu = page.locator(`.affine-menu-action`, {
     hasText: new RegExp(`${columnType}`),
   });
@@ -543,3 +545,28 @@ export function getKanbanCard(
   const card = group.locator('affine-data-view-kanban-card').nth(cardIndex);
   return card;
 }
+export const moveToCenterOf = async (page: Page, locator: Locator) => {
+  const box = (await locator.boundingBox())!;
+  expect(box).toBeDefined();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+};
+export const changeColumnType = async (
+  page: Page,
+  column: number,
+  name: string
+) => {
+  await waitNextFrame(page);
+  await page.locator('affine-database-header-column').nth(column).click();
+  await pressKey(page, 'ArrowDown', 2);
+  await pressKey(page, 'Enter');
+  await type(page, name);
+  await pressKey(page, 'ArrowDown');
+  await pressKey(page, 'Enter');
+};
+export const pressKey = async (page: Page, key: string, count: number = 1) => {
+  for (let i = 0; i < count; i++) {
+    await waitNextFrame(page);
+    await press(page, key);
+  }
+  await waitNextFrame(page);
+};

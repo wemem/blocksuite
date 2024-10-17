@@ -1,19 +1,18 @@
-/* eslint-disable @typescript-eslint/no-restricted-imports */
-
+import { SurfaceBlockSchema } from '@blocksuite/affine-block-surface';
+import {
+  DatabaseBlockSchema,
+  FrameBlockSchema,
+  ListBlockSchema,
+  NoteBlockSchema,
+  ParagraphBlockSchema,
+  RootBlockSchema,
+} from '@blocksuite/affine-model';
 import { DocCollection, Schema, type Y } from '@blocksuite/store';
 // normal import
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { assert, describe, expect, test } from 'vitest';
-
-import { DatabaseBlockSchema } from '../../database-block/database-model.js';
-import { FrameBlockSchema } from '../../frame-block/frame-model.js';
-import { ListBlockSchema } from '../../list-block/list-model.js';
-import { NoteBlockSchema } from '../../note-block/note-model.js';
-import { ParagraphBlockSchema } from '../../paragraph-block/paragraph-model.js';
-import { RootBlockSchema } from '../../root-block/root-model.js';
-import { SurfaceBlockSchema } from '../../surface-block/surface-model.js';
 
 async function loadBinary(name: string) {
   const originPath = fileURLToPath(import.meta.url);

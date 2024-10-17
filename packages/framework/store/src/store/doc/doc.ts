@@ -11,12 +11,6 @@ import { syncBlockProps } from '../../utils/utils.js';
 import { Block } from './block/index.js';
 import { type Query, runQuery } from './query.js';
 
-export enum BlockViewType {
-  Bypass = 'bypass',
-  Display = 'display',
-  Hidden = 'hidden',
-}
-
 type DocOptions = {
   schema: Schema;
   blockCollection: BlockCollection;
@@ -26,6 +20,10 @@ type DocOptions = {
 };
 
 export class Doc {
+  private _runQuery = (block: Block) => {
+    runQuery(this._query, block);
+  };
+
   protected readonly _blockCollection: BlockCollection;
 
   protected readonly _blocks = signal<Record<string, Block>>({});
@@ -40,10 +38,6 @@ export class Doc {
   };
 
   protected readonly _readonly?: boolean;
-
-  private _runQuery = (block: Block) => {
-    runQuery(this._query, block);
-  };
 
   protected readonly _schema: Schema;
 
@@ -80,6 +74,135 @@ export class Doc {
         }
     >;
   };
+
+  private get _yBlocks() {
+    return this._blockCollection.yBlocks;
+  }
+
+  get awarenessStore() {
+    return this._blockCollection.awarenessStore;
+  }
+
+  get awarenessSync() {
+    return this.collection.awarenessSync;
+  }
+
+  get blobSync() {
+    return this.collection.blobSync;
+  }
+
+  get blockCollection() {
+    return this._blockCollection;
+  }
+
+  get blocks() {
+    return this._blocks;
+  }
+
+  get blockSize() {
+    return Object.values(this._blocks.peek()).length;
+  }
+
+  get canRedo() {
+    return this._blockCollection.canRedo;
+  }
+
+  get canUndo() {
+    return this._blockCollection.canUndo;
+  }
+
+  get captureSync() {
+    return this._blockCollection.captureSync.bind(this._blockCollection);
+  }
+
+  get clear() {
+    return this._blockCollection.clear.bind(this._blockCollection);
+  }
+
+  get collection() {
+    return this._blockCollection.collection;
+  }
+
+  get docSync() {
+    return this.collection.docSync;
+  }
+
+  get generateBlockId() {
+    return this._blockCollection.generateBlockId.bind(this._blockCollection);
+  }
+
+  get history() {
+    return this._blockCollection.history;
+  }
+
+  get id() {
+    return this._blockCollection.id;
+  }
+
+  get isEmpty() {
+    return Object.values(this._blocks.peek()).length === 0;
+  }
+
+  get loaded() {
+    return this._blockCollection.loaded;
+  }
+
+  get meta() {
+    return this._blockCollection.meta;
+  }
+
+  get readonly() {
+    if (this._blockCollection.readonly) {
+      return true;
+    }
+    return this._readonly === true;
+  }
+
+  get ready() {
+    return this._blockCollection.ready;
+  }
+
+  get redo() {
+    return this._blockCollection.redo.bind(this._blockCollection);
+  }
+
+  get resetHistory() {
+    return this._blockCollection.resetHistory.bind(this._blockCollection);
+  }
+
+  get root() {
+    const rootId = this._crud.root;
+    if (!rootId) return null;
+    return this.getBlock(rootId)?.model ?? null;
+  }
+
+  get rootDoc() {
+    return this._blockCollection.rootDoc;
+  }
+
+  get schema() {
+    return this._schema;
+  }
+
+  get spaceDoc() {
+    return this._blockCollection.spaceDoc;
+  }
+
+  get Text() {
+    return this._blockCollection.Text;
+  }
+
+  get transact() {
+    return this._blockCollection.transact.bind(this._blockCollection);
+  }
+
+  get undo() {
+    return this._blockCollection.undo.bind(this._blockCollection);
+  }
+
+  get withoutTransact() {
+    return this._blockCollection.withoutTransact.bind(this._blockCollection);
+  }
 
   constructor({ schema, blockCollection, crud, readonly, query }: DocOptions) {
     this._blockCollection = blockCollection;
@@ -218,10 +341,6 @@ export class Doc {
       console.error('An error occurred while removing block:');
       console.error(e);
     }
-  }
-
-  private get _yBlocks() {
-    return this._blockCollection.yBlocks;
   }
 
   addBlock<Key extends BlockSuite.Flavour>(
@@ -365,11 +484,11 @@ export class Doc {
     this.slots.rootDeleted.dispose();
   }
 
-  getBlock(id: string) {
+  getBlock(id: string): Block | undefined {
     return this._blocks.peek()[id];
   }
 
-  getBlock$(id: string) {
+  getBlock$(id: string): Block | undefined {
     return this._blocks.value[id];
   }
 
@@ -521,6 +640,7 @@ export class Doc {
     }
 
     const block = this.getBlock(model.id);
+    if (!block) return;
 
     this.transact(() => {
       if (isCallback) {
@@ -547,130 +667,5 @@ export class Doc {
       this._runQuery(block);
       return;
     });
-  }
-
-  get Text() {
-    return this._blockCollection.Text;
-  }
-
-  get awarenessStore() {
-    return this._blockCollection.awarenessStore;
-  }
-
-  get awarenessSync() {
-    return this.collection.awarenessSync;
-  }
-
-  get blobSync() {
-    return this.collection.blobSync;
-  }
-
-  get blockCollection() {
-    return this._blockCollection;
-  }
-
-  get blockSize() {
-    return Object.values(this._blocks.peek()).length;
-  }
-
-  get blocks() {
-    return this._blocks;
-  }
-
-  get canRedo() {
-    return this._blockCollection.canRedo;
-  }
-
-  get canUndo() {
-    return this._blockCollection.canUndo;
-  }
-
-  get captureSync() {
-    return this._blockCollection.captureSync.bind(this._blockCollection);
-  }
-
-  get clear() {
-    return this._blockCollection.clear.bind(this._blockCollection);
-  }
-
-  get collection() {
-    return this._blockCollection.collection;
-  }
-
-  get docSync() {
-    return this.collection.docSync;
-  }
-
-  get generateBlockId() {
-    return this._blockCollection.generateBlockId.bind(this._blockCollection);
-  }
-
-  get history() {
-    return this._blockCollection.history;
-  }
-
-  get id() {
-    return this._blockCollection.id;
-  }
-
-  get isEmpty() {
-    return Object.values(this._blocks.peek()).length === 0;
-  }
-
-  get loaded() {
-    return this._blockCollection.loaded;
-  }
-
-  get meta() {
-    return this._blockCollection.meta;
-  }
-
-  get readonly() {
-    if (this._blockCollection.readonly) {
-      return true;
-    }
-    return this._readonly === true;
-  }
-
-  get ready() {
-    return this._blockCollection.ready;
-  }
-
-  get redo() {
-    return this._blockCollection.redo.bind(this._blockCollection);
-  }
-
-  get resetHistory() {
-    return this._blockCollection.resetHistory.bind(this._blockCollection);
-  }
-
-  get root() {
-    const rootId = this._crud.root;
-    if (!rootId) return null;
-    return this.getBlock(rootId)?.model ?? null;
-  }
-
-  get rootDoc() {
-    return this._blockCollection.rootDoc;
-  }
-
-  get schema() {
-    return this._schema;
-  }
-
-  get spaceDoc() {
-    return this._blockCollection.spaceDoc;
-  }
-
-  get transact() {
-    return this._blockCollection.transact.bind(this._blockCollection);
-  }
-
-  get undo() {
-    return this._blockCollection.undo.bind(this._blockCollection);
-  }
-
-  get withoutTransact() {
-    return this._blockCollection.withoutTransact.bind(this._blockCollection);
   }
 }

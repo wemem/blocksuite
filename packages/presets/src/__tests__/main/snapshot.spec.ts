@@ -21,7 +21,10 @@ beforeEach(async () => {
 const xywhPattern = /\[(\s*-?\d+(\.\d+)?\s*,){3}(\s*-?\d+(\.\d+)?\s*)\]/;
 
 test('snapshot 1 importing', async () => {
-  const pageService = window.editor.host!.std.spec.getService('affine:page');
+  const pageService = window.editor.host!.std.getService('affine:page');
+  if (!pageService) {
+    throw new Error('page service not found');
+  }
   const transformer = pageService.transformers.zip;
 
   const snapshotFile = await fetch(
@@ -77,7 +80,10 @@ test('snapshot 1 importing', async () => {
 });
 
 test('snapshot 2 importing', async () => {
-  const pageService = window.editor.host!.std.spec.getService('affine:page');
+  const pageService = window.editor.host!.std.getService('affine:page');
+  if (!pageService) {
+    throw new Error('page service not found');
+  }
   const transformer = pageService.transformers.zip;
 
   const snapshotFile = await fetch(

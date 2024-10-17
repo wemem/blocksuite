@@ -1,9 +1,8 @@
-import type { NoteDisplayMode } from '@blocks/_common/types.js';
-import type { NoteBlockModel } from '@blocks/note-block/index.js';
-import type { IPoint, IVec } from '@global/utils/index.js';
+import type { NoteBlockModel, NoteDisplayMode } from '@blocks/index.js';
+import type { IPoint, IVec } from '@blocksuite/global/utils';
 import type { Locator, Page } from '@playwright/test';
 
-import { assertExists, sleep } from '@global/utils/index.js';
+import { assertExists, sleep } from '@blocksuite/global/utils';
 import { expect } from '@playwright/test';
 
 import type { Bound } from '../asserts.js';
@@ -12,17 +11,18 @@ import '../declare-test-window.js';
 import { clickView } from './click.js';
 import { dragBetweenCoords } from './drag.js';
 import {
-  SHIFT_KEY,
-  SHORT_KEY,
   pressBackspace,
   pressEnter,
   selectAllByKeyboard,
+  SHIFT_KEY,
+  SHORT_KEY,
   type,
 } from './keyboard.js';
 import {
   enterPlaygroundRoom,
   getEditorLocator,
   initEmptyEdgelessState,
+  resetHistory,
   waitNextFrame,
 } from './misc.js';
 
@@ -115,6 +115,12 @@ export async function toggleFramePanel(page: Page) {
   await waitNextFrame(page);
 }
 
+export async function toggleMultipleEditors(page: Page) {
+  await page.click('sl-button:text("Test Operations")');
+  await page.click('sl-menu-item:text("Toggle Multiple Editors")');
+  await waitNextFrame(page);
+}
+
 export async function switchEditorMode(page: Page) {
   await page.click('sl-tooltip[content="Switch Editor"]');
   // FIXME: listen to editor loaded event
@@ -124,6 +130,17 @@ export async function switchEditorMode(page: Page) {
 export async function switchEditorEmbedMode(page: Page) {
   await page.click('sl-button:text("Test Operations")');
   await page.click('sl-menu-item:text("Switch Offset Mode")');
+}
+
+export async function enterPresentationMode(page: Page) {
+  await page.click('sl-tooltip[content="Enter presentation mode"]');
+  await waitNextFrame(page);
+}
+
+export async function toggleEditorReadonly(page: Page) {
+  await page.click('sl-button:text("Test Operations")');
+  await page.click('sl-menu-item:text("Toggle Readonly")');
+  await waitNextFrame(page);
 }
 
 type EdgelessTool =
@@ -140,6 +157,8 @@ type EdgelessTool =
   | 'lasso';
 type ZoomToolType = 'zoomIn' | 'zoomOut' | 'fitToScreen';
 type ComponentToolType = 'shape' | 'thin' | 'thick' | 'brush' | 'more';
+
+type PresentationToolType = 'previous' | 'next';
 
 const locatorEdgelessToolButtonSenior = async (
   page: Page,
@@ -263,6 +282,23 @@ export function locatorEdgelessComponentToolButton(
   return innerContainer ? button.locator('.icon-container') : button;
 }
 
+export function locatorPresentationToolbarButton(
+  page: Page,
+  type: PresentationToolType
+) {
+  const text = {
+    previous: 'Previous',
+    next: 'Next',
+  }[type];
+  const button = page
+    .locator('presentation-toolbar edgeless-tool-icon-button')
+    .filter({
+      hasText: text,
+    });
+
+  return button;
+}
+
 export async function setEdgelessTool(
   page: Page,
   mode: EdgelessTool,
@@ -339,14 +375,7 @@ export async function assertEdgelessShapeType(page: Page, type: ShapeName) {
     if (container.edgelessTool.type !== 'shape')
       throw new Error('Expected shape tool');
 
-    const shapeType = container.edgelessTool.shapeType;
-    if (
-      shapeType === 'rect' &&
-      container.service.editPropsStore.getLastProps('shape').radius > 0
-    )
-      return 'roundedRect';
-
-    return container.edgelessTool.shapeType;
+    return container.edgelessTool.shapeName;
   });
 
   expect(type).toEqual(curType);
@@ -698,6 +727,10 @@ export function locatorNoteDisplayModeButton(
     .locator(`.item.${mode}`);
 }
 
+export function locatorScalePanelButton(page: Page, scale: number) {
+  return page.locator('edgeless-scale-panel').locator(`.scale-${scale}`);
+}
+
 export async function changeNoteDisplayMode(page: Page, mode: NoteDisplayMode) {
   const button = locatorNoteDisplayModeButton(page, mode);
   await button.click();
@@ -978,6 +1011,7 @@ type Action =
   | 'autoSize'
   | 'changeNoteDisplayMode'
   | 'changeNoteSlicerSetting'
+  | 'changeNoteScale'
   | 'addText'
   | 'quickConnect'
   | 'turnIntoLinkedDoc'
@@ -1199,6 +1233,13 @@ export async function triggerComponentToolbarAction(
       await button.click();
       break;
     }
+    case 'changeNoteScale': {
+      const button = locatorComponentToolbar(page)
+        .locator('edgeless-change-note-button')
+        .getByRole('button', { name: 'Scale' });
+      await button.click();
+      break;
+    }
     case 'autoSize': {
       const button = locatorComponentToolbar(page)
         .locator('edgeless-change-note-button')
@@ -1287,15 +1328,34 @@ export async function changeEdgelessNoteBackground(page: Page, color: string) {
 export async function changeShapeFillColor(page: Page, color: string) {
   const colorButton = page
     .locator('edgeless-change-shape-button')
-    .getByRole('listbox', { name: 'Fill colors' })
+    .locator('edgeless-color-picker-button.fill-color')
+    .locator('edgeless-color-panel')
     .locator(`.color-unit[aria-label="${color}"]`);
-  await colorButton.click();
+  await colorButton.click({ force: true });
+}
+
+export async function changeShapeFillColorToTransparent(page: Page) {
+  const colorButton = page
+    .locator('edgeless-change-shape-button')
+    .locator('edgeless-color-picker-button.fill-color')
+    .locator('edgeless-color-panel')
+    .locator('edgeless-color-custom-button');
+  await colorButton.click({ force: true });
+
+  const input = page.locator('edgeless-color-picker').locator('label.alpha');
+  await input.focus();
+  await input.press('ArrowRight');
+  await input.press('ArrowRight');
+  await input.press('ArrowRight');
+  await input.press('Backspace');
+  await input.press('Backspace');
+  await input.press('Backspace');
 }
 
 export async function changeShapeStrokeColor(page: Page, color: string) {
   const colorButton = page
     .locator('edgeless-change-shape-button')
-    .getByRole('listbox', { name: 'Border colors' })
+    .locator('edgeless-color-picker-button.border-style')
     .locator(`.color-unit[aria-label="${color}"]`);
   await colorButton.click();
 }
@@ -1465,11 +1525,17 @@ export async function toViewCoord(page: Page, point: number[]) {
 export async function dragBetweenViewCoords(
   page: Page,
   start: number[],
-  end: number[]
+  end: number[],
+  options?: Parameters<typeof dragBetweenCoords>[3]
 ) {
   const [startX, startY] = await toViewCoord(page, start);
   const [endX, endY] = await toViewCoord(page, end);
-  await dragBetweenCoords(page, { x: startX, y: startY }, { x: endX, y: endY });
+  await dragBetweenCoords(
+    page,
+    { x: startX, y: startY },
+    { x: endX, y: endY },
+    options
+  );
 }
 
 export async function toModelCoord(page: Page, point: number[]) {
@@ -1498,6 +1564,14 @@ export async function getConnectorPath(page: Page, index = 0): Promise<IVec[]> {
     },
     [index]
   );
+}
+
+export async function getSelectedBoundCount(page: Page) {
+  return page.evaluate(() => {
+    const container = document.querySelector('affine-edgeless-root');
+    if (!container) throw new Error('container not found');
+    return container.service.selection.selectedElements.length;
+  });
 }
 
 export async function getSelectedBound(
@@ -1627,8 +1701,10 @@ export async function getSortedIdsInViewport(page: Page) {
     const container = document.querySelector('affine-edgeless-root');
     if (!container) throw new Error('container not found');
     const { service } = container;
-    return service.layer.canvasGrid
-      .search(service.viewport.viewportBounds)
+    return service.gfx.grid
+      .search(service.viewport.viewportBounds, undefined, {
+        filter: model => !('flavour' in model),
+      })
       .map(e => e.id);
   });
 }
@@ -1638,6 +1714,16 @@ export async function edgelessCommonSetup(page: Page) {
   await initEmptyEdgelessState(page);
   await switchEditorMode(page);
   await deleteAll(page);
+  await resetHistory(page);
+}
+
+export async function createFrame(
+  page: Page,
+  coord1: [number, number],
+  coord2: [number, number]
+) {
+  await page.keyboard.press('f');
+  await dragBetweenViewCoords(page, coord1, coord2);
 }
 
 export async function createShapeElement(

@@ -1,12 +1,12 @@
 import { expect } from '@playwright/test';
 
 import {
-  Shape,
   createNote,
   createShapeElement,
   decreaseZoomLevel,
   deleteAll,
   getAllSortedIds,
+  Shape,
   switchEditorMode,
   toViewCoord,
   triggerComponentToolbarAction,
@@ -20,7 +20,7 @@ import {
   focusTitle,
   getCurrentEditorDocId,
   initEmptyEdgelessState,
-  mockQuickSearch,
+  mockParseDocUrlService,
   pasteByKeyboard,
   pasteContent,
   selectAllByKeyboard,
@@ -113,6 +113,7 @@ test.describe('frame clipboard', () => {
     const originIds = await getAllSortedIds(page);
     expect(originIds.length).toBe(5);
 
+    await selectAllByKeyboard(page);
     await copyByKeyboard(page);
     const move = await toViewCoord(page, [250, 250]);
     await page.mouse.move(move[0], move[1]);
@@ -179,7 +180,9 @@ test.describe('pasting URLs', () => {
       'text/plain': 'https://github.com/toeverything/blocksuite/pull/7217',
     });
 
-    await expect(page.locator('affine-embed-github-block')).toBeVisible();
+    await expect(
+      page.locator('affine-embed-edgeless-github-block')
+    ).toBeVisible();
   });
 
   test('pasting internal link', async ({ page }) => {
@@ -194,7 +197,7 @@ test.describe('pasting URLs', () => {
     await switchEditorMode(page);
     await deleteAll(page);
 
-    await mockQuickSearch(page, {
+    await mockParseDocUrlService(page, {
       'http://workspace/doc-id': docId,
     });
 
@@ -202,7 +205,9 @@ test.describe('pasting URLs', () => {
       'text/plain': 'http://workspace/doc-id',
     });
 
-    await expect(page.locator('affine-embed-linked-doc-block')).toBeVisible();
+    await expect(
+      page.locator('affine-embed-edgeless-linked-doc-block')
+    ).toBeVisible();
 
     await expect(
       page.locator('.affine-embed-linked-doc-content-title')

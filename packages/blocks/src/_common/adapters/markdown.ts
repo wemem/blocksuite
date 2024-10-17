@@ -1,41 +1,41 @@
+import type { AffineTextAttributes } from '@blocksuite/affine-components/rich-text';
 import type { DeltaInsert } from '@blocksuite/inline/types';
-import type {
-  FromBlockSnapshotPayload,
-  FromBlockSnapshotResult,
-  FromDocSnapshotPayload,
-  FromDocSnapshotResult,
-  FromSliceSnapshotPayload,
-  FromSliceSnapshotResult,
-  ToBlockSnapshotPayload,
-  ToDocSnapshotPayload,
-} from '@blocksuite/store';
 import type { Heading, Root, RootContentMap, TableRow } from 'mdast';
 
+import {
+  type Column,
+  DEFAULT_NOTE_BACKGROUND_COLOR,
+  NoteDisplayMode,
+  type SerializedCells,
+} from '@blocksuite/affine-model';
+import { getFilenameFromContentDisposition } from '@blocksuite/affine-shared/utils';
 import { assertExists, sha } from '@blocksuite/global/utils';
 import {
-  ASTWalker,
   type AssetsManager,
+  ASTWalker,
   BaseAdapter,
   type BlockSnapshot,
   BlockSnapshotSchema,
   type DocSnapshot,
-  type SliceSnapshot,
+  type FromBlockSnapshotPayload,
+  type FromBlockSnapshotResult,
+  type FromDocSnapshotPayload,
+  type FromDocSnapshotResult,
+  type FromSliceSnapshotPayload,
+  type FromSliceSnapshotResult,
   getAssetName,
   nanoid,
+  type SliceSnapshot,
+  type ToBlockSnapshotPayload,
+  type ToDocSnapshotPayload,
 } from '@blocksuite/store';
 import { format } from 'date-fns/format';
 import remarkParse from 'remark-parse';
 import remarkStringify from 'remark-stringify';
 import { unified } from 'unified';
 
-import type { SerializedCells } from '../../database-block/database-model.js';
-import type { Column } from '../../database-block/types.js';
-import type { AffineTextAttributes } from '../inline/presets/affine-inline-specs.js';
-
-import { NoteDisplayMode } from '../types.js';
-import { getFilenameFromContentDisposition } from '../utils/header-value-parser.js';
 import { remarkGfm } from './gfm.js';
-import { createText, fetchImage, fetchable, isNullish } from './utils.js';
+import { createText, fetchable, fetchImage, isNullish } from './utils.js';
 
 export type Markdown = string;
 
@@ -245,13 +245,17 @@ export class MarkdownAdapter extends BaseAdapter<Markdown> {
             break;
           }
           if (!fetchable(o.node.url)) {
-            const imageURL = o.node.url;
-            assets.getAssets().forEach((_value, key) => {
-              const imageName = getAssetName(assets.getAssets(), key);
-              if (decodeURIComponent(imageURL).includes(imageName)) {
+            const imageURLSplit = o.node.url.split('/');
+            while (imageURLSplit.length > 0) {
+              const key = assets
+                .getPathBlobIdMap()
+                .get(decodeURIComponent(imageURLSplit.join('/')));
+              if (key) {
                 blobId = key;
+                break;
               }
-            });
+              imageURLSplit.shift();
+            }
           } else {
             const res = await fetchImage(
               o.node.url,
@@ -1080,7 +1084,7 @@ export class MarkdownAdapter extends BaseAdapter<Markdown> {
       flavour: 'affine:note',
       props: {
         xywh: '[0,0,800,95]',
-        background: '--affine-background-secondary-color',
+        background: DEFAULT_NOTE_BACKGROUND_COLOR,
         index: 'a0',
         hidden: false,
         displayMode: NoteDisplayMode.DocAndEdgeless,
@@ -1104,7 +1108,7 @@ export class MarkdownAdapter extends BaseAdapter<Markdown> {
       flavour: 'affine:note',
       props: {
         xywh: '[0,0,800,95]',
-        background: '--affine-background-secondary-color',
+        background: DEFAULT_NOTE_BACKGROUND_COLOR,
         index: 'a0',
         hidden: false,
         displayMode: NoteDisplayMode.DocAndEdgeless,
@@ -1163,7 +1167,7 @@ export class MarkdownAdapter extends BaseAdapter<Markdown> {
         if (line.trimStart().startsWith('-')) {
           return line;
         }
-        const trimmedLine = line.trimStart();
+        let trimmedLine = line.trimStart();
         if (!codeFence && trimmedLine.startsWith('```')) {
           codeFence = trimmedLine.substring(
             0,
@@ -1194,6 +1198,25 @@ export class MarkdownAdapter extends BaseAdapter<Markdown> {
         if (codeFence) {
           return line;
         }
+
+        trimmedLine = trimmedLine.trimEnd();
+        if (!trimmedLine.startsWith('<') && !trimmedLine.endsWith('>')) {
+          // check if it is a url link and wrap it with the angle brackets
+          // sometimes the url includes emphasis `_` that will break URL parsing
+          //
+          // eg. /MuawcBMT1Mzvoar09-_66?mode=page&blockIds=rL2_GXbtLU2SsJVfCSmh_
+          // https://www.markdownguide.org/basic-syntax/#urls-and-email-addresses
+          try {
+            const valid =
+              URL.canParse?.(trimmedLine) ?? Boolean(new URL(trimmedLine));
+            if (valid) {
+              return `<${trimmedLine}>`;
+            }
+          } catch (err) {
+            console.log(err);
+          }
+        }
+
         return line.replace(/^ /, '&#x20;');
       })
       .join('\n');
@@ -1204,7 +1227,7 @@ export class MarkdownAdapter extends BaseAdapter<Markdown> {
       flavour: 'affine:note',
       props: {
         xywh: '[0,0,800,95]',
-        background: '--affine-background-secondary-color',
+        background: DEFAULT_NOTE_BACKGROUND_COLOR,
         index: 'a0',
         hidden: false,
         displayMode: NoteDisplayMode.DocAndEdgeless,

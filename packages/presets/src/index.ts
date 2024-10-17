@@ -1,3 +1,5 @@
+import '@blocksuite/affine-block-surface/effects';
+
 export * from './blocks/index.js';
 export * from './editors/index.js';
 export * from './fragments/index.js';
@@ -20,12 +22,6 @@ if (env[importIdentifier] === true) {
   // https://github.com/yjs/yjs/issues/438
   console.error(
     '@blocksuite/presets was already imported. This breaks constructor checks and will lead to issues!'
-  );
-}
-
-if (typeof window === 'undefined') {
-  throw new Error(
-    'Seems like you are importing @blocksuite/presets in SSR mode. Which is not supported for now.'
   );
 }
 

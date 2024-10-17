@@ -1,17 +1,24 @@
+import type {
+  AttachmentBlockProps,
+  ImageBlockModel,
+  ImageBlockProps,
+} from '@blocksuite/affine-model';
 import type { EditorHost } from '@blocksuite/block-std';
 import type { BlockModel } from '@blocksuite/store';
 
+import { toast } from '@blocksuite/affine-components/toast';
+import {
+  downloadBlob,
+  humanFileSize,
+  withTempBlobData,
+} from '@blocksuite/affine-shared/utils';
 import { BlockSuiteError, ErrorCode } from '@blocksuite/global/exceptions';
 
-import type { AttachmentBlockProps } from '../attachment-block/attachment-model.js';
 import type { ImageBlockComponent } from './image-block.js';
-import type { ImageBlockModel, ImageBlockProps } from './image-model.js';
+import type { ImageEdgelessBlockComponent } from './image-edgeless-block.js';
 
-import { downloadBlob, withTempBlobData } from '../_common/utils/filesys.js';
-import { humanFileSize } from '../_common/utils/math.js';
 import { readImageSize } from '../root-block/edgeless/components/utils.js';
 import { transformModel } from '../root-block/utils/operations/model.js';
-import { toast } from './../_common/components/toast.js';
 
 const MAX_RETRY_COUNT = 3;
 const DEFAULT_ATTACHMENT_NAME = 'affine-attachment';
@@ -97,7 +104,9 @@ async function getImageBlob(model: ImageBlockModel) {
   return blob;
 }
 
-export async function fetchImageBlob(block: ImageBlockComponent) {
+export async function fetchImageBlob(
+  block: ImageBlockComponent | ImageEdgelessBlockComponent
+) {
   try {
     if (block.model.sourceUrl && block.model.sourceUrl != block.lastSourceUrl) {
       // const blob = await fetch(block.model.sourceUrl).then(res => res.blob());
@@ -160,7 +169,9 @@ export async function fetchImageBlob(block: ImageBlockComponent) {
   }
 }
 
-export async function downloadImageBlob(block: ImageBlockComponent) {
+export async function downloadImageBlob(
+  block: ImageBlockComponent | ImageEdgelessBlockComponent
+) {
   const { host, downloading } = block;
   if (downloading) {
     toast(host, 'Download in progress...');
@@ -182,7 +193,9 @@ export async function downloadImageBlob(block: ImageBlockComponent) {
   block.downloading = false;
 }
 
-export async function resetImageSize(block: ImageBlockComponent) {
+export async function resetImageSize(
+  block: ImageBlockComponent | ImageEdgelessBlockComponent
+) {
   const { blob, model } = block;
   if (!blob) {
     return;
@@ -227,7 +240,9 @@ function convertToPng(blob: Blob): Promise<Blob | null> {
   });
 }
 
-export async function copyImageBlob(block: ImageBlockComponent) {
+export async function copyImageBlob(
+  block: ImageBlockComponent | ImageEdgelessBlockComponent
+) {
   const { host, model } = block;
   let blob = await getImageBlob(model);
   if (!blob) {
@@ -367,7 +382,9 @@ export function addImageBlocks(
 /**
  * Turn the image block into a attachment block.
  */
-export async function turnImageIntoCardView(block: ImageBlockComponent) {
+export async function turnImageIntoCardView(
+  block: ImageBlockComponent | ImageEdgelessBlockComponent
+) {
   const doc = block.doc;
   if (!doc.schema.flavourSchemaMap.has('affine:attachment')) {
     console.error('The attachment flavour is not supported!');

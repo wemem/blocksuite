@@ -1,36 +1,40 @@
 import type {
+  AffineTextAttributes,
+  RichText,
+} from '@blocksuite/affine-components/rich-text';
+import type {
   BaseSelection,
   BlockComponent,
   CursorSelection,
 } from '@blocksuite/block-std';
 
-import { WidgetComponent } from '@blocksuite/block-std';
-import { DisposableGroup, assertExists } from '@blocksuite/global/utils';
+import { HoverController } from '@blocksuite/affine-components/hover';
+import { isFormatSupported } from '@blocksuite/affine-components/rich-text';
 import {
-  type Placement,
-  type ReferenceElement,
+  cloneGroups,
+  type MenuItemGroup,
+} from '@blocksuite/affine-components/toolbar';
+import { matchFlavours } from '@blocksuite/affine-shared/utils';
+import { WidgetComponent } from '@blocksuite/block-std';
+import { assertExists, DisposableGroup } from '@blocksuite/global/utils';
+import {
   autoUpdate,
   computePosition,
   inline,
   offset,
+  type Placement,
+  type ReferenceElement,
   shift,
 } from '@floating-ui/dom';
 import { html, nothing } from 'lit';
-import { customElement, query, state } from 'lit/decorators.js';
+import { query, state } from 'lit/decorators.js';
 
-import type { AffineTextAttributes } from '../../../_common/inline/presets/affine-inline-specs.js';
+import type { FormatBarContext } from './context.js';
 
-import '../../../_common/components/button.js';
-import {
-  HoverController,
-  type RichText,
-} from '../../../_common/components/index.js';
-import '../../../_common/components/toolbar/toolbar.js';
-import { matchFlavours } from '../../../_common/utils/model.js';
-import { isFormatSupported } from '../../../note-block/commands/utils.js';
-import { isRootComponent } from '../../../root-block/utils/guard.js';
+import { getMoreMenuConfig } from '../../configs/toolbar.js';
 import { ConfigRenderer } from './components/config-renderer.js';
 import {
+  BUILT_IN_GROUPS,
   type FormatBarConfigItem,
   type InlineActionConfigItem,
   type ParagraphActionConfigItem,
@@ -41,8 +45,9 @@ import { formatBarStyle } from './styles.js';
 
 export const AFFINE_FORMAT_BAR_WIDGET = 'affine-format-bar-widget';
 
-@customElement(AFFINE_FORMAT_BAR_WIDGET)
 export class AffineFormatBarWidget extends WidgetComponent {
+  static override styles = formatBarStyle;
+
   private _abortController = new AbortController();
 
   private _floatDisposables: DisposableGroup | null = null;
@@ -51,7 +56,29 @@ export class AffineFormatBarWidget extends WidgetComponent {
 
   private _placement: Placement = 'top';
 
-  static override styles = formatBarStyle;
+  /*
+   * Caches the more menu items.
+   * Currently only supports configuring more menu.
+   */
+  moreGroups: MenuItemGroup<FormatBarContext>[] = cloneGroups(BUILT_IN_GROUPS);
+
+  private get _selectionManager() {
+    return this.host.selection;
+  }
+
+  get displayType() {
+    return this._displayType;
+  }
+
+  get nativeRange() {
+    const sl = document.getSelection();
+    if (!sl || sl.rangeCount === 0) return null;
+    return sl.getRangeAt(0);
+  }
+
+  get selectedBlocks() {
+    return this._selectedBlocks;
+  }
 
   private _calculatePlacement() {
     const rootComponent = this.block;
@@ -171,6 +198,8 @@ export class AffineFormatBarWidget extends WidgetComponent {
       })
     );
     this.disposables.addFromEvent(document, 'selectionchange', () => {
+      if (!this.host.event.active) return;
+
       const databaseSelection = this.host.selection.find('database');
       if (!databaseSelection) {
         return;
@@ -311,15 +340,12 @@ export class AffineFormatBarWidget extends WidgetComponent {
     return false;
   }
 
-  private get _selectionManager() {
-    return this.host.selection;
-  }
-
   private _shouldDisplay() {
     const readonly = this.doc.awarenessStore.isReadonly(
       this.doc.blockCollection
     );
-    if (readonly) return false;
+    const active = this.host.event.active;
+    if (readonly || !active) return false;
 
     if (
       this.displayType === 'block' &&
@@ -492,7 +518,7 @@ export class AffineFormatBarWidget extends WidgetComponent {
     }
 
     // check if format bar widget support the host
-    if (!isRootComponent(rootComponent)) {
+    if (rootComponent.model.flavour !== 'affine:page') {
       console.error(
         `format bar not support rootComponent: ${rootComponent.constructor.name} but its widgets has format bar`
       );
@@ -504,6 +530,8 @@ export class AffineFormatBarWidget extends WidgetComponent {
     if (this.configItems.length === 0) {
       toolbarDefaultConfig(this);
     }
+
+    this.moreGroups = getMoreMenuConfig(this.std).configure(this.moreGroups);
   }
 
   override disconnectedCallback() {
@@ -544,20 +572,6 @@ export class AffineFormatBarWidget extends WidgetComponent {
 
     this._floatDisposables = new DisposableGroup();
     this._listenFloatingElement();
-  }
-
-  get displayType() {
-    return this._displayType;
-  }
-
-  get nativeRange() {
-    const sl = document.getSelection();
-    if (!sl || sl.rangeCount === 0) return null;
-    return sl.getRangeAt(0);
-  }
-
-  get selectedBlocks() {
-    return this._selectedBlocks;
   }
 
   @state()

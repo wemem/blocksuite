@@ -1,28 +1,19 @@
-import { LitElement, css, html } from 'lit';
-import { customElement, state } from 'lit/decorators.js';
-import { styleMap } from 'lit/directives/style-map.js';
-
-import type { LastProps } from '../../../../../surface-block/managers/edit-session.js';
-
 import {
   EdgelessPenDarkIcon,
   EdgelessPenLightIcon,
-} from '../../../../../_common/icons/edgeless.js';
-import { ThemeObserver } from '../../../../../_common/theme/theme-observer.js';
-import { LineWidth } from '../../../../../_common/utils/index.js';
-import '../../buttons/toolbar-button.js';
-import { DEFAULT_BRUSH_COLOR } from '../../panel/color-panel.js';
-import { getTooltipWithShortcut } from '../../utils.js';
-import {
-  applyLastProps,
-  observeLastProps,
-} from '../common/observe-last-props.js';
-import { EdgelessToolbarToolMixin } from '../mixins/tool.mixin.js';
-import './brush-menu.js';
+} from '@blocksuite/affine-components/icons';
+import { EditPropsStore } from '@blocksuite/affine-shared/services';
+import { ThemeObserver } from '@blocksuite/affine-shared/theme';
+import { SignalWatcher } from '@blocksuite/global/utils';
+import { computed } from '@preact/signals-core';
+import { css, html, LitElement } from 'lit';
+import { styleMap } from 'lit/directives/style-map.js';
 
-@customElement('edgeless-brush-tool-button')
+import { getTooltipWithShortcut } from '../../utils.js';
+import { EdgelessToolbarToolMixin } from '../mixins/tool.mixin.js';
+
 export class EdgelessBrushToolButton extends EdgelessToolbarToolMixin(
-  LitElement
+  SignalWatcher(LitElement)
 ) {
   static override styles = css`
     :host {
@@ -50,6 +41,12 @@ export class EdgelessBrushToolButton extends EdgelessToolbarToolMixin(
     }
   `;
 
+  private _color$ = computed(() => {
+    return ThemeObserver.generateColorProperty(
+      this.edgeless.std.get(EditPropsStore).lastProps$.value.brush.color
+    );
+  });
+
   override enableActiveBackground = true;
 
   override type = 'brush' as const;
@@ -61,35 +58,16 @@ export class EdgelessBrushToolButton extends EdgelessToolbarToolMixin(
     Object.assign(menu.element, {
       edgeless: this.edgeless,
       onChange: (props: Record<string, unknown>) => {
-        this.edgeless.service.editPropsStore.recordLastProps('brush', props);
+        this.edgeless.std.get(EditPropsStore).recordLastProps('brush', props);
         this.setEdgelessTool({ type: 'brush' });
       },
     });
-    this.updateMenu();
-  }
-
-  override connectedCallback() {
-    super.connectedCallback();
-    const { edgeless, states, statesKeys } = this;
-    applyLastProps(edgeless.service, 'brush', statesKeys, states);
-
-    this.disposables.add(
-      observeLastProps(
-        edgeless.service,
-        'brush',
-        statesKeys,
-        states,
-        updates => {
-          this.states = { ...this.states, ...updates };
-        }
-      )
-    );
   }
 
   override render() {
     const { active, theme } = this;
     const icon = theme === 'dark' ? EdgelessPenDarkIcon : EdgelessPenLightIcon;
-    const color = ThemeObserver.generateColorProperty(this.states.color);
+    const color = this._color$.value;
 
     return html`
       <edgeless-toolbar-button
@@ -104,28 +82,6 @@ export class EdgelessBrushToolButton extends EdgelessToolbarToolMixin(
       </edgeless-toolbar-button>
     `;
   }
-
-  updateMenu() {
-    const { popper } = this;
-    if (!popper) return;
-    Object.assign(popper.element, this.states);
-  }
-
-  override updated(changedProperties: Map<string, unknown>) {
-    if (changedProperties.has('states') && this.popper) {
-      this.updateMenu();
-    }
-  }
-
-  get statesKeys() {
-    return Object.keys(this.states) as (keyof LastProps['brush'])[];
-  }
-
-  @state()
-  accessor states: LastProps['brush'] = {
-    color: DEFAULT_BRUSH_COLOR,
-    lineWidth: LineWidth.Four,
-  };
 }
 
 declare global {

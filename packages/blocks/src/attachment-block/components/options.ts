@@ -1,50 +1,39 @@
+import type { AttachmentBlockModel } from '@blocksuite/affine-model';
+
+import {
+  CaptionIcon,
+  DownloadIcon,
+  EditIcon,
+  MoreVerticalIcon,
+  SmallArrowDownIcon,
+} from '@blocksuite/affine-components/icons';
+import { createLitPortal } from '@blocksuite/affine-components/portal';
+import {
+  cloneGroups,
+  renderGroups,
+  renderToolbarSeparator,
+} from '@blocksuite/affine-components/toolbar';
 import { flip, offset } from '@floating-ui/dom';
 import { html, nothing } from 'lit';
 import { join } from 'lit/directives/join.js';
 import { repeat } from 'lit/directives/repeat.js';
 
 import type { AttachmentBlockComponent } from '../attachment-block.js';
-import type { AttachmentBlockModel } from '../attachment-model.js';
 
-import { createLitPortal } from '../../_common/components/portal.js';
-import '../../_common/components/toolbar/icon-button.js';
-import '../../_common/components/toolbar/menu-button.js';
-import '../../_common/components/toolbar/separator.js';
-import { renderToolbarSeparator } from '../../_common/components/toolbar/separator.js';
-import '../../_common/components/toolbar/toolbar.js';
-import { renderActions } from '../../_common/components/toolbar/utils.js';
-import {
-  CaptionIcon,
-  CopyIcon,
-  DeleteIcon,
-  DownloadIcon,
-  DuplicateIcon,
-  EditIcon,
-  MoreVerticalIcon,
-  RefreshIcon,
-  SmallArrowDownIcon,
-  // ViewIcon,
-} from '../../_common/icons/index.js';
+import { getMoreMenuConfig } from '../../root-block/configs/toolbar.js';
 import { allowEmbed, convertToEmbed } from '../embed.js';
-import { cloneAttachmentProperties } from '../utils.js';
+import { BUILT_IN_GROUPS } from './config.js';
+import { AttachmentToolbarMoreMenuContext } from './context.js';
 import { RenameModal } from './rename-model.js';
 import { styles } from './styles.js';
 
 export function AttachmentOptionsTemplate({
   anchor,
   model,
-  showCaption,
-  copy,
-  download,
-  refresh,
   abortController,
 }: {
   anchor: AttachmentBlockComponent;
   model: AttachmentBlockModel;
-  copy: () => void;
-  download: () => void;
-  refresh: () => void;
-  showCaption: () => void;
   abortController: AbortController;
 }) {
   const disableEmbed = !allowEmbed(model, anchor.service.maxFileSize);
@@ -54,74 +43,29 @@ export function AttachmentOptionsTemplate({
   const viewActions = [
     {
       type: 'card',
-      name: 'Card view',
+      label: 'Card view',
       disabled: readonly || !model.embed,
-      handler: () => {
+      action: () => {
         model.doc.updateBlock(model, { embed: false });
         abortController.abort();
       },
     },
     {
       type: 'embed',
-      name: 'Embed view',
+      label: 'Embed view',
       disabled: readonly || disableEmbed,
-      handler: () => {
+      action: () => {
         convertToEmbed(model, anchor.service.maxFileSize);
         abortController.abort();
       },
     },
   ];
 
-  const moreActions = renderActions([
-    [
-      {
-        type: 'copy',
-        name: 'Copy',
-        icon: CopyIcon,
-        disabled: readonly,
-        handler: copy,
-      },
-      {
-        type: 'duplicate',
-        name: 'Duplicate',
-        icon: DuplicateIcon,
-        disabled: readonly,
-        handler: () => {
-          const prop: { flavour: 'affine:attachment' } = {
-            flavour: 'affine:attachment',
-            ...cloneAttachmentProperties(model),
-          };
-          model.doc.addSiblingBlocks(model, [prop]);
-        },
-      },
-      {
-        type: 'reload',
-        name: 'Reload',
-        icon: RefreshIcon,
-        disabled: readonly,
-        handler: refresh,
-      },
-      {
-        type: 'download',
-        name: 'Download',
-        icon: DownloadIcon,
-        disabled: readonly,
-        handler: download,
-      },
-    ],
-    [
-      {
-        type: 'delete',
-        name: 'Delete',
-        icon: DeleteIcon,
-        disabled: readonly,
-        handler: () => {
-          model.doc.deleteBlock(model);
-          abortController.abort();
-        },
-      },
-    ],
-  ]);
+  const context = new AttachmentToolbarMoreMenuContext(anchor, abortController);
+  const groups = getMoreMenuConfig(anchor.std).configure(
+    cloneGroups(BUILT_IN_GROUPS)
+  );
+  const moreMenuActions = renderGroups(groups, context);
 
   const buttons = [
     // preview
@@ -183,13 +127,13 @@ export function AttachmentOptionsTemplate({
           ${repeat(
             viewActions,
             button => button.type,
-            ({ type, name, handler }) => html`
+            ({ type, label, action }) => html`
               <editor-menu-action
                 data-testid=${`link-to-${type}`}
                 ?data-selected=${type === viewType}
-                @click=${handler}
+                @click=${action}
               >
-                ${name}
+                ${label}
               </editor-menu-action>
             `
           )}
@@ -203,7 +147,7 @@ export function AttachmentOptionsTemplate({
           <editor-icon-button
             aria-label="Download"
             .tooltip=${'Download'}
-            @click=${download}
+            @click=${() => anchor.download()}
           >
             ${DownloadIcon}
           </editor-icon-button>
@@ -215,7 +159,7 @@ export function AttachmentOptionsTemplate({
           <editor-icon-button
             aria-label="Caption"
             .tooltip=${'Caption'}
-            @click=${showCaption}
+            @click=${() => anchor.captionEditor?.show()}
           >
             ${CaptionIcon}
           </editor-icon-button>
@@ -230,7 +174,9 @@ export function AttachmentOptionsTemplate({
           </editor-icon-button>
         `}
       >
-        <div data-size="large" data-orientation="vertical">${moreActions}</div>
+        <div data-size="large" data-orientation="vertical">
+          ${moreMenuActions}
+        </div>
       </editor-menu-button>
     `,
   ];

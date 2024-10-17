@@ -1,39 +1,84 @@
 import type { BaseSelection } from '@blocksuite/block-std';
 
+import { NotificationProvider } from '@blocksuite/affine-shared/services';
+import {
+  getPageRootByElement,
+  stopPropagation,
+} from '@blocksuite/affine-shared/utils';
 import { WidgetComponent } from '@blocksuite/block-std';
 import { assertExists } from '@blocksuite/global/utils';
 import {
-  type ComputePositionConfig,
-  type Rect,
   autoPlacement,
   autoUpdate,
   computePosition,
+  type ComputePositionConfig,
   flip,
   offset,
+  type Rect,
   shift,
 } from '@floating-ui/dom';
-import { type PropertyValues, css, html, nothing } from 'lit';
-import { customElement, property, query } from 'lit/decorators.js';
+import { css, html, nothing, type PropertyValues } from 'lit';
+import { property, query } from 'lit/decorators.js';
 import { choose } from 'lit/directives/choose.js';
 
 import type { AIError } from '../../../_common/components/index.js';
+import type { EdgelessRootService } from '../../edgeless/edgeless-root-service.js';
 import type { AIPanelGenerating } from './components/index.js';
 import type { AffineAIPanelState, AffineAIPanelWidgetConfig } from './type.js';
 
-import { stopPropagation } from '../../../_common/utils/event.js';
-import { getPageRootByElement } from '../../../_common/utils/query.js';
 import { PageRootService } from '../../page/page-root-service.js';
 import { AFFINE_FORMAT_BAR_WIDGET } from '../format-bar/format-bar.js';
 import {
   AFFINE_VIEWPORT_OVERLAY_WIDGET,
   type AffineViewportOverlayWidget,
 } from '../viewport-overlay/viewport-overlay.js';
-import './components/index.js';
 
 export const AFFINE_AI_PANEL_WIDGET = 'affine-ai-panel-widget';
 
-@customElement(AFFINE_AI_PANEL_WIDGET)
 export class AffineAIPanelWidget extends WidgetComponent {
+  static override styles = css`
+    :host {
+      display: flex;
+      outline: none;
+      border-radius: var(--8, 8px);
+      border: 1px solid var(--affine-border-color);
+      background: var(--affine-background-overlay-panel-color);
+      box-shadow: var(--affine-overlay-shadow);
+
+      position: absolute;
+      width: max-content;
+      height: auto;
+      top: 0;
+      left: 0;
+      overflow-y: auto;
+      scrollbar-width: none !important;
+      z-index: var(--affine-z-index-popover);
+    }
+
+    .ai-panel-container {
+      display: flex;
+      flex-direction: column;
+      box-sizing: border-box;
+      width: 100%;
+      height: fit-content;
+      padding: 8px 0;
+    }
+
+    .ai-panel-container:not(:has(ai-panel-generating)) {
+      gap: 8px;
+    }
+
+    .ai-panel-container:has(ai-panel-answer),
+    .ai-panel-container:has(ai-panel-error),
+    .ai-panel-container:has(ai-panel-generating:has(generating-placeholder)) {
+      padding: 12px 0;
+    }
+
+    :host([data-state='hidden']) {
+      display: none;
+    }
+  `;
+
   private _abortController = new AbortController();
 
   private _answer: string | null = null;
@@ -130,49 +175,6 @@ export class AffineAIPanelWidget extends WidgetComponent {
 
   private _stopAutoUpdate?: undefined | (() => void);
 
-  static override styles = css`
-    :host {
-      display: flex;
-      outline: none;
-      border-radius: var(--8, 8px);
-      border: 1px solid var(--affine-border-color);
-      background: var(--affine-background-overlay-panel-color);
-      box-shadow: var(--affine-overlay-shadow);
-
-      position: absolute;
-      width: max-content;
-      height: auto;
-      top: 0;
-      left: 0;
-      overflow-y: auto;
-      scrollbar-width: none !important;
-      z-index: var(--affine-z-index-popover);
-    }
-
-    .ai-panel-container {
-      display: flex;
-      flex-direction: column;
-      box-sizing: border-box;
-      width: 100%;
-      height: fit-content;
-      padding: 8px 0;
-    }
-
-    .ai-panel-container:not(:has(ai-panel-generating)) {
-      gap: 8px;
-    }
-
-    .ai-panel-container:has(ai-panel-answer),
-    .ai-panel-container:has(ai-panel-error),
-    .ai-panel-container:has(ai-panel-generating:has(generating-placeholder)) {
-      padding: 12px 0;
-    }
-
-    :host([data-state='hidden']) {
-      display: none;
-    }
-  `;
-
   ctx: unknown = null;
 
   discard = () => {
@@ -255,8 +257,7 @@ export class AffineAIPanelWidget extends WidgetComponent {
   };
 
   showDiscardModal = () => {
-    const notification =
-      this.host.std.spec.getService('affine:page').notificationService;
+    const notification = this.host.std.getOptional(NotificationProvider);
     if (!notification) {
       return Promise.resolve(true);
     }
@@ -294,6 +295,24 @@ export class AffineAIPanelWidget extends WidgetComponent {
     this._autoUpdatePosition(reference);
   };
 
+  get answer() {
+    return this._answer;
+  }
+
+  get inputText() {
+    return this._inputText;
+  }
+
+  get viewportOverlayWidget() {
+    const rootId = this.host.doc.root?.id;
+    return rootId
+      ? (this.host.view.getWidget(
+          AFFINE_VIEWPORT_OVERLAY_WIDGET,
+          rootId
+        ) as AffineViewportOverlayWidget)
+      : null;
+  }
+
   private _autoUpdatePosition(reference: Element) {
     // workaround for the case that the reference contains children block elements, like:
     // paragraph
@@ -323,11 +342,12 @@ export class AffineAIPanelWidget extends WidgetComponent {
   ): Partial<ComputePositionConfig> {
     let rootBoundary: Rect | undefined;
     {
-      const rootService = this.host.std.spec.getService('affine:page');
+      const rootService = this.host.std.getService('affine:page');
       if (rootService instanceof PageRootService) {
         rootBoundary = undefined;
       } else {
-        const viewport = rootService.viewport;
+        // TODO circular dependency: instanceof EdgelessRootService
+        const viewport = (rootService as EdgelessRootService).viewport;
         rootBoundary = {
           x: viewport.left,
           y: viewport.top,
@@ -540,24 +560,6 @@ export class AffineAIPanelWidget extends WidgetComponent {
     }
 
     this.dataset.state = this.state;
-  }
-
-  get answer() {
-    return this._answer;
-  }
-
-  get inputText() {
-    return this._inputText;
-  }
-
-  get viewportOverlayWidget() {
-    const rootId = this.host.doc.root?.id;
-    return rootId
-      ? (this.host.view.getWidget(
-          AFFINE_VIEWPORT_OVERLAY_WIDGET,
-          rootId
-        ) as AffineViewportOverlayWidget)
-      : null;
   }
 
   @property({ attribute: false })

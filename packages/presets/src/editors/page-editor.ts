@@ -1,22 +1,19 @@
 import type { Doc } from '@blocksuite/store';
 
 import {
+  BlockStdScope,
   EditorHost,
   ShadowlessElement,
-  WithDisposable,
 } from '@blocksuite/block-std';
 import { PageEditorBlockSpecs } from '@blocksuite/blocks';
-import { noop } from '@blocksuite/global/utils';
-import { type TemplateResult, css, html, nothing } from 'lit';
-import { customElement, property } from 'lit/decorators.js';
-import { type Ref, createRef, ref } from 'lit/directives/ref.js';
+import { noop, WithDisposable } from '@blocksuite/global/utils';
+import { css, html, nothing } from 'lit';
+import { property, state } from 'lit/decorators.js';
+import { guard } from 'lit/directives/guard.js';
 
 noop(EditorHost);
 
-@customElement('page-editor')
 export class PageEditor extends WithDisposable(ShadowlessElement) {
-  private _host: Ref<EditorHost> = createRef<EditorHost>();
-
   static override styles = css`
     page-editor {
       font-family: var(--affine-font-family);
@@ -48,11 +45,23 @@ export class PageEditor extends WithDisposable(ShadowlessElement) {
     }
   `;
 
+  get host() {
+    try {
+      return this.std.host;
+    } catch {
+      return null;
+    }
+  }
+
   override connectedCallback() {
     super.connectedCallback();
     this._disposables.add(
       this.doc.slots.rootAdded.on(() => this.requestUpdate())
     );
+    this.std = new BlockStdScope({
+      doc: this.doc,
+      extensions: this.specs,
+    });
   }
 
   override async getUpdateComplete(): Promise<boolean> {
@@ -62,6 +71,7 @@ export class PageEditor extends WithDisposable(ShadowlessElement) {
   }
 
   override render() {
+    const std = this.std;
     if (!this.doc.root) return nothing;
 
     return html`
@@ -70,30 +80,34 @@ export class PageEditor extends WithDisposable(ShadowlessElement) {
           ? 'affine-page-viewport'
           : 'page-editor-container'}
       >
-        <editor-host
-          ${ref(this._host)}
-          .doc=${this.doc}
-          .specs=${this.specs}
-        ></editor-host>
+        ${guard([std], () => std.render())}
       </div>
     `;
   }
 
-  get host() {
-    return this._host.value;
+  override willUpdate(
+    changedProperties: Map<string | number | symbol, unknown>
+  ) {
+    super.willUpdate(changedProperties);
+    if (changedProperties.has('doc')) {
+      this.std = new BlockStdScope({
+        doc: this.doc,
+        extensions: this.specs,
+      });
+    }
   }
 
   @property({ attribute: false })
   accessor doc!: Doc;
-
-  @property({ attribute: false })
-  accessor editor!: TemplateResult;
 
   @property({ type: Boolean })
   accessor hasViewport = true;
 
   @property({ attribute: false })
   accessor specs = PageEditorBlockSpecs;
+
+  @state()
+  accessor std!: BlockStdScope;
 }
 
 declare global {

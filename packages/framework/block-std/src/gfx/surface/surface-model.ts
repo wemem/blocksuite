@@ -37,7 +37,7 @@ export class SurfaceBlockModel extends BlockModel<SurfaceBlockProps> {
       GfxPrimitiveElementModel,
       ConstructorParameters<typeof GfxPrimitiveElementModel>
     >
-  > = {};
+  > = Object.create(null);
 
   protected _elementModels = new Map<
     string,
@@ -79,6 +79,16 @@ export class SurfaceBlockModel extends BlockModel<SurfaceBlockProps> {
       model: GfxPrimitiveElementModel;
     }>(),
   };
+
+  get elementModels() {
+    const models: GfxPrimitiveElementModel[] = [];
+    this._elementModels.forEach(model => models.push(model.model));
+    return models;
+  }
+
+  get registeredElementTypes() {
+    return Object.keys(this._elementCtorMap);
+  }
 
   constructor() {
     super();
@@ -152,7 +162,7 @@ export class SurfaceBlockModel extends BlockModel<SurfaceBlockProps> {
     const state = this._decoratorState;
 
     state.creating = true;
-    state.skipYfield = options.skipFieldInit ?? false;
+    state.skipField = options.skipFieldInit ?? false;
 
     let mounted = false;
     // @ts-ignore
@@ -169,7 +179,7 @@ export class SurfaceBlockModel extends BlockModel<SurfaceBlockProps> {
     // @ts-ignore
     delete Ctor['_decoratorState'];
     state.creating = false;
-    state.skipYfield = false;
+    state.skipField = false;
 
     const unmount = () => {
       mounted = false;
@@ -197,24 +207,6 @@ export class SurfaceBlockModel extends BlockModel<SurfaceBlockProps> {
       mount,
       unmount,
     };
-  }
-
-  protected _extendElement(
-    ctorMap: Record<
-      string,
-      Constructor<
-        GfxPrimitiveElementModel,
-        ConstructorParameters<typeof GfxPrimitiveElementModel>
-      >
-    >
-  ) {
-    Object.assign(this._elementCtorMap, ctorMap);
-  }
-
-  protected _init() {
-    this._initElementModels();
-    this._watchGroupRelationChange();
-    this.applyMiddlewares();
   }
 
   private _initElementModels() {
@@ -430,6 +422,24 @@ export class SurfaceBlockModel extends BlockModel<SurfaceBlockProps> {
     });
   }
 
+  protected _extendElement(
+    ctorMap: Record<
+      string,
+      Constructor<
+        GfxPrimitiveElementModel,
+        ConstructorParameters<typeof GfxPrimitiveElementModel>
+      >
+    >
+  ) {
+    Object.assign(this._elementCtorMap, ctorMap);
+  }
+
+  protected _init() {
+    this._initElementModels();
+    this._watchGroupRelationChange();
+    this.applyMiddlewares();
+  }
+
   addElement<T extends object = Record<string, unknown>>(
     props: Partial<T> & { type: string }
   ) {
@@ -572,11 +582,5 @@ export class SurfaceBlockModel extends BlockModel<SurfaceBlockProps> {
         elementModel[key] = value;
       });
     });
-  }
-
-  get elementModels() {
-    const models: GfxPrimitiveElementModel[] = [];
-    this._elementModels.forEach(model => models.push(model.model));
-    return models;
   }
 }

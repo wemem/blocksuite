@@ -1,17 +1,19 @@
+import type {
+  BookmarkBlockModel,
+  EmbedFigmaModel,
+  EmbedGithubModel,
+  EmbedLoomModel,
+  EmbedYoutubeModel,
+} from '@blocksuite/affine-model';
 import type { EditorHost } from '@blocksuite/block-std';
 
-import { ShadowlessElement, WithDisposable } from '@blocksuite/block-std';
+import { toast } from '@blocksuite/affine-components/toast';
+import { ShadowlessElement } from '@blocksuite/block-std';
+import { WithDisposable } from '@blocksuite/global/utils';
 import { html } from 'lit';
-import { customElement, property, query, state } from 'lit/decorators.js';
+import { property, query, state } from 'lit/decorators.js';
 import { classMap } from 'lit/directives/class-map.js';
 
-import type { BookmarkBlockModel } from '../../../../bookmark-block/bookmark-model.js';
-import type { EmbedFigmaModel } from '../../../../embed-figma-block/embed-figma-model.js';
-import type { EmbedGithubModel } from '../../../../embed-github-block/embed-github-model.js';
-import type { EmbedLoomModel } from '../../../../embed-loom-block/embed-loom-model.js';
-import type { EmbedYoutubeModel } from '../../../../embed-youtube-block/embed-youtube-model.js';
-
-import { toast } from '../../toast.js';
 import { embedCardModalStyles } from './styles.js';
 
 type EmbedCardModel =
@@ -21,7 +23,6 @@ type EmbedCardModel =
   | EmbedFigmaModel
   | EmbedLoomModel;
 
-@customElement('embed-card-edit-modal')
 export class EmbedCardEditModal extends WithDisposable(ShadowlessElement) {
   static override styles = embedCardModalStyles;
 

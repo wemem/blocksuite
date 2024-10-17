@@ -1,40 +1,42 @@
+import type { Viewport } from '@blocksuite/block-std/gfx';
 import type { PointLocation } from '@blocksuite/global/utils';
 import type { BlockModel } from '@blocksuite/store';
 
-import { deserializeXYWH } from '@blocksuite/global/utils';
-import { Bound } from '@blocksuite/global/utils';
+import {
+  type CanvasElementWithText,
+  CommonUtils,
+  GRID_GAP_MAX,
+  GRID_GAP_MIN,
+} from '@blocksuite/affine-block-surface';
+import {
+  type AttachmentBlockModel,
+  type BookmarkBlockModel,
+  ConnectorElementModel,
+  type EdgelessTextBlockModel,
+  type EmbedBlockModel,
+  type EmbedFigmaModel,
+  type EmbedGithubModel,
+  type EmbedHtmlModel,
+  type EmbedLinkedDocModel,
+  type EmbedLoomModel,
+  type EmbedSyncedDocModel,
+  type EmbedYoutubeModel,
+  type FrameBlockModel,
+  type ImageBlockModel,
+  MindmapElementModel,
+  type NoteBlockModel,
+  ShapeElementModel,
+  TextElementModel,
+} from '@blocksuite/affine-model';
+import { Bound, deserializeXYWH } from '@blocksuite/global/utils';
 
-import type { EmbedBlockModel } from '../../../_common/embed-block-helper/embed-block-model.js';
 import type { Connectable } from '../../../_common/utils/index.js';
-import type { AttachmentBlockModel } from '../../../attachment-block/index.js';
-import type { BookmarkBlockModel } from '../../../bookmark-block/bookmark-model.js';
-import type { EdgelessTextBlockModel } from '../../../edgeless-text/edgeless-text-model.js';
-import type { EmbedFigmaModel } from '../../../embed-figma-block/embed-figma-model.js';
-import type { EmbedGithubModel } from '../../../embed-github-block/index.js';
-import type { EmbedHtmlModel } from '../../../embed-html-block/index.js';
-import type { EmbedLinkedDocModel } from '../../../embed-linked-doc-block/embed-linked-doc-model.js';
-import type { EmbedLoomModel } from '../../../embed-loom-block/embed-loom-model.js';
-import type { EmbedSyncedDocModel } from '../../../embed-synced-doc-block/embed-synced-doc-model.js';
-import type { EmbedYoutubeModel } from '../../../embed-youtube-block/embed-youtube-model.js';
-import type { FrameBlockModel } from '../../../frame-block/index.js';
-import type { ImageBlockModel } from '../../../image-block/index.js';
-import type { NoteBlockModel } from '../../../note-block/index.js';
-import type { Viewport } from '../../../root-block/edgeless/utils/viewport.js';
 import type { GfxBlockModel } from '../block-model.js';
 import type { EdgelessTool } from '../types.js';
 
-import {
-  type CanvasElementWithText,
-  ConnectorElementModel,
-  GRID_GAP_MAX,
-  GRID_GAP_MIN,
-  MindmapElementModel,
-  ShapeElementModel,
-  TextElementModel,
-  clamp,
-  getQuadBoundsWithRotation,
-} from '../../../surface-block/index.js';
 import { getElementsWithoutGroup } from './group.js';
+
+const { clamp, getQuadBoundsWithRotation } = CommonUtils;
 
 export function isMindmapNode(
   element: GfxBlockModel | BlockSuite.EdgelessModel | null
@@ -43,7 +45,7 @@ export function isMindmapNode(
 }
 
 export function isTopLevelBlock(
-  selectable: BlockModel | BlockSuite.EdgelessModel | BlockModel | null
+  selectable: BlockModel | BlockSuite.EdgelessModel | null
 ): selectable is GfxBlockModel {
   return !!selectable && 'flavour' in selectable;
 }

@@ -1,143 +1,59 @@
-import { RangeManager } from '@blocksuite/block-std';
-import { Slice } from '@blocksuite/store';
-import { computed } from '@lit-labs/preact-signals';
-import { css, html, nothing, unsafeCSS } from 'lit';
-import { customElement } from 'lit/decorators.js';
+import type { DatabaseBlockModel } from '@blocksuite/affine-model';
 
-import type { NoteBlockComponent } from '../note-block/index.js';
-import type { AffineInnerModalWidget } from '../root-block/index.js';
-import type { DatabaseBlockModel } from './database-model.js';
-import type { DatabaseBlockService } from './database-service.js';
-
+import { CaptionedBlockComponent } from '@blocksuite/affine-components/caption';
+import { popMenu } from '@blocksuite/affine-components/context-menu';
+import { DragIndicator } from '@blocksuite/affine-components/drag-indicator';
+import { PeekViewProvider } from '@blocksuite/affine-components/peek';
+import { toast } from '@blocksuite/affine-components/toast';
+import { NOTE_SELECTOR } from '@blocksuite/affine-shared/consts';
+import { DocModeProvider } from '@blocksuite/affine-shared/services';
+import { RANGE_SYNC_EXCLUDE_ATTR } from '@blocksuite/block-std';
 import {
-  CaptionedBlockComponent,
-  DragIndicator,
-  popMenu,
-  toast,
-} from '../_common/components/index.js';
-import { NOTE_SELECTOR } from '../_common/edgeless/note/consts.js';
-import {
-  CopyIcon,
-  DeleteIcon,
-  MoreHorizontalIcon,
-} from '../_common/icons/index.js';
-import { Rect } from '../_common/utils/index.js';
-import {
-  AffineDragHandleWidget,
-  EdgelessRootBlockComponent,
-} from '../root-block/index.js';
-import {
-  captureEventTarget,
-  getDropResult,
-} from '../root-block/widgets/drag-handle/utils.js';
-import { AFFINE_INNER_MODAL_WIDGET } from '../root-block/widgets/inner-modal/inner-modal.js';
-import './components/title/index.js';
-import { DatabaseBlockDataSource } from './data-source.js';
-import { dataViewCommonStyle } from './data-view/common/css-variable.js';
-import {
+  createRecordDetail,
+  createUniComponentFromWebComponent,
+  DatabaseSelection,
   DataView,
+  dataViewCommonStyle,
   type DataViewExpose,
   type DataViewProps,
   type DataViewSelection,
   type DataViewWidget,
   type DataViewWidgetProps,
-  DatabaseSelection,
   defineUniComponent,
   renderUniLit,
-  widgetPresets,
-} from './data-view/index.js';
-import { DatabaseBlockSchema } from './database-model.js';
+  uniMap,
+} from '@blocksuite/data-view';
+import { widgetPresets } from '@blocksuite/data-view/widget-presets';
+import { Rect } from '@blocksuite/global/utils';
+import {
+  CopyIcon,
+  DeleteIcon,
+  MoreHorizontalIcon,
+} from '@blocksuite/icons/lit';
+import { Slice } from '@blocksuite/store';
+import { autoUpdate } from '@floating-ui/dom';
+import { computed, signal } from '@preact/signals-core';
+import { css, html, nothing, unsafeCSS } from 'lit';
 
-@customElement('affine-database')
+import type { NoteBlockComponent } from '../note-block/index.js';
+import type { DatabaseOptionsConfig } from './config.js';
+import type { DatabaseBlockService } from './database-service.js';
+
+import {
+  EdgelessRootBlockComponent,
+  type RootService,
+} from '../root-block/index.js';
+import { getDropResult } from '../root-block/widgets/drag-handle/utils.js';
+import { popSideDetail } from './components/layout.js';
+import { HostContextKey } from './context/host-context.js';
+import { DatabaseBlockDataSource } from './data-source.js';
+import { BlockRenderer } from './detail-panel/block-renderer.js';
+import { NoteRenderer } from './detail-panel/note-renderer.js';
+
 export class DatabaseBlockComponent extends CaptionedBlockComponent<
   DatabaseBlockModel,
   DatabaseBlockService
 > {
-  _bindHotkey: DataViewProps['bindHotkey'] = hotkeys => {
-    return {
-      dispose: this.host.event.bindHotkey(hotkeys, {
-        path: this.topContenteditableElement?.path ?? this.path,
-      }),
-    };
-  };
-
-  private _clickDatabaseOps = (e: MouseEvent) => {
-    popMenu(e.currentTarget as HTMLElement, {
-      options: {
-        input: {
-          initValue: this.model.title.toString(),
-          placeholder: 'Untitled',
-          onComplete: text => {
-            this.model.title.replace(0, this.model.title.length, text);
-          },
-        },
-        items: [
-          {
-            type: 'action',
-            icon: CopyIcon,
-            name: 'Copy',
-            select: () => {
-              const slice = Slice.fromModels(this.doc, [this.model]);
-              this.std.clipboard
-                .copySlice(slice)
-                .then(() => {
-                  toast(this.host, 'Copied to clipboard');
-                })
-                .catch(console.error);
-            },
-          },
-          // {
-          //   type: 'action',
-          //   icon: DuplicateIcon,
-          //   name: 'Duplicate',
-          //   select: () => {
-          //   },
-          // },
-          {
-            type: 'group',
-            name: '',
-            children: () => [
-              {
-                type: 'action',
-                icon: DeleteIcon,
-                class: 'delete-item',
-                name: 'Delete Database',
-                select: () => {
-                  this.model.children.slice().forEach(block => {
-                    this.doc.deleteBlock(block);
-                  });
-                  this.doc.deleteBlock(this.model);
-                },
-              },
-            ],
-          },
-        ],
-      },
-    });
-  };
-
-  private _dataSource?: DatabaseBlockDataSource;
-
-  _handleEvent: DataViewProps['handleEvent'] = (name, handler) => {
-    return {
-      dispose: this.host.event.add(name, handler, {
-        path: this.path,
-      }),
-    };
-  };
-
-  private dataView = new DataView();
-
-  private renderTitle = (dataViewMethod: DataViewExpose) => {
-    const addRow = () => dataViewMethod.addRow?.('start');
-    return html` <affine-database-title
-      style="overflow: hidden"
-      .titleText="${this.model.title}"
-      .readonly="${this.doc.readonly}"
-      .onPressEnterKey="${addRow}"
-    ></affine-database-title>`;
-  };
-
   static override styles = css`
     ${unsafeCSS(dataViewCommonStyle('affine-database'))}
     affine-database {
@@ -170,10 +86,98 @@ export class DatabaseBlockComponent extends CaptionedBlockComponent<
     .database-ops:hover {
       background-color: var(--affine-hover-color);
     }
+
+    @media print {
+      .database-ops {
+        display: none;
+      }
+
+      .database-header-bar {
+        display: none !important;
+      }
+    }
   `;
 
+  private _clickDatabaseOps = (e: MouseEvent) => {
+    const options = this.optionsConfig.configure(this.model, {
+      input: {
+        initValue: this.model.title.toString(),
+        placeholder: 'Untitled',
+        onComplete: text => {
+          this.model.title.replace(0, this.model.title.length, text);
+        },
+      },
+      items: [
+        {
+          type: 'action',
+          icon: CopyIcon(),
+          name: 'Copy',
+          select: () => {
+            const slice = Slice.fromModels(this.doc, [this.model]);
+            this.std.clipboard
+              .copySlice(slice)
+              .then(() => {
+                toast(this.host, 'Copied to clipboard');
+              })
+              .catch(console.error);
+          },
+        },
+        {
+          type: 'group',
+          name: '',
+          children: () => [
+            {
+              type: 'action',
+              icon: DeleteIcon(),
+              class: 'delete-item',
+              name: 'Delete Database',
+              select: () => {
+                this.model.children.slice().forEach(block => {
+                  this.doc.deleteBlock(block);
+                });
+                this.doc.deleteBlock(this.model);
+              },
+            },
+          ],
+        },
+      ],
+    });
+
+    popMenu(e.currentTarget as HTMLElement, { options });
+  };
+
+  private _dataSource?: DatabaseBlockDataSource;
+
+  private dataView = new DataView();
+
+  private renderTitle = (dataViewMethod: DataViewExpose) => {
+    const addRow = () => dataViewMethod.addRow?.('start');
+    return html` <affine-database-title
+      style="overflow: hidden"
+      .titleText="${this.model.title}"
+      .readonly="${this.doc.readonly}"
+      .onPressEnterKey="${addRow}"
+    ></affine-database-title>`;
+  };
+
+  _bindHotkey: DataViewProps['bindHotkey'] = hotkeys => {
+    return {
+      dispose: this.host.event.bindHotkey(hotkeys, {
+        blockId: this.topContenteditableElement?.blockId ?? this.blockId,
+      }),
+    };
+  };
+
+  _handleEvent: DataViewProps['handleEvent'] = (name, handler) => {
+    return {
+      dispose: this.host.event.add(name, handler, {
+        blockId: this.blockId,
+      }),
+    };
+  };
+
   getRootService = () => {
-    return this.std.spec.getService('affine:page');
+    return this.std.getService<RootService>('affine:page');
   };
 
   headerWidget: DataViewWidget = defineUniComponent(
@@ -185,6 +189,7 @@ export class DatabaseBlockComponent extends CaptionedBlockComponent<
           </div>
           <div
             style="display:flex;align-items:center;justify-content: space-between;gap: 12px"
+            class="database-header-bar"
           >
             <div style="flex:1">
               ${renderUniLit(widgetPresets.viewBar, props)}
@@ -211,8 +216,8 @@ export class DatabaseBlockComponent extends CaptionedBlockComponent<
       );
       return () => {
         this.indicator.remove();
-        const model = this.doc.getBlock(id).model;
-        const target = this.doc.getBlock(result.dropBlockId).model;
+        const model = this.doc.getBlock(id)?.model;
+        const target = this.doc.getBlock(result.dropBlockId)?.model ?? null;
         let parent = this.doc.getParent(result.dropBlockId);
         const shouldInsertIn = result.dropType === 'in';
         if (shouldInsertIn) {
@@ -253,14 +258,12 @@ export class DatabaseBlockComponent extends CaptionedBlockComponent<
   toolsWidget: DataViewWidget = widgetPresets.createTools({
     table: [
       widgetPresets.tools.filter,
-      widgetPresets.tools.expand,
       widgetPresets.tools.search,
       widgetPresets.tools.viewOptions,
       widgetPresets.tools.tableAddRow,
     ],
     kanban: [
       widgetPresets.tools.filter,
-      widgetPresets.tools.expand,
       widgetPresets.tools.search,
       widgetPresets.tools.viewOptions,
     ],
@@ -278,105 +281,21 @@ export class DatabaseBlockComponent extends CaptionedBlockComponent<
     return databaseSelection?.viewSelection;
   });
 
-  private renderDatabaseOps() {
-    if (this.doc.readonly) {
-      return nothing;
-    }
-    return html` <div class="database-ops" @click="${this._clickDatabaseOps}">
-      ${MoreHorizontalIcon}
-    </div>`;
-  }
-
-  override connectedCallback() {
-    super.connectedCallback();
-
-    this.setAttribute(RangeManager.rangeSyncExcludeAttr, 'true');
-    let canDrop = false;
-    this.disposables.add(
-      AffineDragHandleWidget.registerOption({
-        flavour: DatabaseBlockSchema.model.flavour,
-        onDragMove: state => {
-          const target = captureEventTarget(state.raw.target);
-          const view = this.view;
-          if (view && target instanceof HTMLElement && this.contains(target)) {
-            canDrop = view.showIndicator?.(state.raw) ?? false;
-            return false;
-          }
-          if (canDrop) {
-            view?.hideIndicator?.();
-            canDrop = false;
-          }
-          return false;
-        },
-        onDragEnd: ({ state, draggingElements }) => {
-          const target = state.raw.target;
-          const view = this.view;
-          if (
-            canDrop &&
-            view &&
-            view.moveTo &&
-            target instanceof HTMLElement &&
-            this.parentElement?.contains(target)
-          ) {
-            const blocks = draggingElements.map(v => v.model);
-            this.doc.moveBlocks(blocks, this.model);
-            blocks.forEach(model => {
-              view.moveTo?.(model.id, state.raw);
-            });
-            view.hideIndicator?.();
-            return false;
-          }
-          if (canDrop) {
-            view?.hideIndicator?.();
-            canDrop = false;
-          }
-          return false;
-        },
-      })
-    );
-  }
-
-  override renderBlock() {
-    const peekViewService = this.getRootService().peekViewService;
-    return html`
-      <div
-        contenteditable="false"
-        style="position: relative;background-color: var(--affine-background-primary-color);border-radius: 4px"
-      >
-        ${this.dataView.render({
-          bindHotkey: this._bindHotkey,
-          handleEvent: this._handleEvent,
-          selection$: this.viewSelection$,
-          setSelection: this.setSelection,
-          dataSource: this.dataSource,
-          headerWidget: this.headerWidget,
-          onDrag: this.onDrag,
-          std: this.std,
-          detailPanelConfig: {
-            openDetailPanel: peekViewService
-              ? (target, template) => peekViewService.peek(target, template)
-              : undefined,
-            target: () => this.innerModalWidget.target,
-          },
-        })}
-      </div>
-    `;
-  }
+  virtualPadding$ = signal(0);
 
   get dataSource(): DatabaseBlockDataSource {
     if (!this._dataSource) {
-      this._dataSource = new DatabaseBlockDataSource(this.host, {
-        pageId: this.host.doc.id,
-        blockId: this.model.id,
-      });
+      this._dataSource = new DatabaseBlockDataSource(this.model);
+      this._dataSource.contextSet(HostContextKey, this.host);
     }
     return this._dataSource;
   }
 
-  get innerModalWidget() {
-    return this.rootComponent!.widgetComponents[
-      AFFINE_INNER_MODAL_WIDGET
-    ] as AffineInnerModalWidget;
+  get optionsConfig(): DatabaseOptionsConfig {
+    return {
+      configure: (_model, options) => options,
+      ...this.std.getConfig('affine:page')?.databaseOptions,
+    };
   }
 
   override get topContenteditableElement() {
@@ -390,6 +309,92 @@ export class DatabaseBlockComponent extends CaptionedBlockComponent<
   get view() {
     return this.dataView.expose;
   }
+
+  private renderDatabaseOps() {
+    if (this.doc.readonly) {
+      return nothing;
+    }
+    return html` <div class="database-ops" @click="${this._clickDatabaseOps}">
+      ${MoreHorizontalIcon()}
+    </div>`;
+  }
+
+  override connectedCallback() {
+    super.connectedCallback();
+
+    this.setAttribute(RANGE_SYNC_EXCLUDE_ATTR, 'true');
+    this.listenFullWidthChange();
+  }
+
+  listenFullWidthChange() {
+    if (!this.doc.awarenessStore.getFlag('enable_database_full_width')) {
+      return;
+    }
+    if (this.std.get(DocModeProvider).getEditorMode() === 'edgeless') {
+      return;
+    }
+    this.disposables.add(
+      autoUpdate(this.host, this, () => {
+        const padding =
+          this.getBoundingClientRect().left -
+          this.host.getBoundingClientRect().left;
+        this.virtualPadding$.value = Math.max(0, padding - 72);
+      })
+    );
+  }
+
+  override renderBlock() {
+    const peekViewService = this.std.getOptional(PeekViewProvider);
+    return html`
+      <div
+        contenteditable="false"
+        style="position: relative;background-color: var(--affine-background-primary-color);border-radius: 4px"
+      >
+        ${this.dataView.render({
+          virtualPadding$: this.virtualPadding$,
+          bindHotkey: this._bindHotkey,
+          handleEvent: this._handleEvent,
+          selection$: this.viewSelection$,
+          setSelection: this.setSelection,
+          dataSource: this.dataSource,
+          headerWidget: this.headerWidget,
+          onDrag: this.onDrag,
+          std: this.std,
+          detailPanelConfig: {
+            openDetailPanel: (target, data) => {
+              const template = createRecordDetail({
+                ...data,
+                detail: {
+                  header: uniMap(
+                    createUniComponentFromWebComponent(BlockRenderer),
+                    props => ({
+                      ...props,
+                      host: this.host,
+                    })
+                  ),
+                  note: uniMap(
+                    createUniComponentFromWebComponent(NoteRenderer),
+                    props => ({
+                      ...props,
+                      model: this.model,
+                      host: this.host,
+                    })
+                  ),
+                },
+              });
+              if (peekViewService) {
+                return peekViewService.peek(target, template);
+              } else {
+                return popSideDetail(template);
+              }
+            },
+          },
+        })}
+      </div>
+    `;
+  }
+
+  override accessor useZeroWidth = true;
 }
 
 declare global {

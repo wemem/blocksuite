@@ -1,8 +1,17 @@
-import type { BlockSpec, EditorHost } from '@blocksuite/block-std';
-import type { DocModeService, PageRootService } from '@blocksuite/blocks';
-import type { BlockCollection } from '@blocksuite/store';
-import type { DocCollection } from '@blocksuite/store';
+import type { EditorHost, ExtensionType } from '@blocksuite/block-std';
+import type { BlockCollection, DocCollection } from '@blocksuite/store';
 
+import { PeekViewExtension } from '@blocksuite/affine-components/peek';
+import {
+  CommunityCanvasTextFonts,
+  DocModeExtension,
+  DocModeProvider,
+  FontConfigExtension,
+  NotificationExtension,
+  ParseDocUrlExtension,
+  RefNodeSlotsExtension,
+  RefNodeSlotsProvider,
+} from '@blocksuite/blocks';
 import { assertExists } from '@blocksuite/global/utils';
 import { AffineEditorContainer } from '@blocksuite/presets';
 
@@ -12,16 +21,17 @@ import { QuickEdgelessMenu } from '../../_common/components/quick-edgeless-menu.
 import {
   mockDocModeService,
   mockNotificationService,
-  mockQuickSearchService,
+  mockParseDocUrlService,
 } from '../../_common/mock-services.js';
 import { getExampleSpecs } from '../specs-examples/index.js';
 
-function setDocModeFromUrlParams(service: DocModeService) {
+function setDocModeFromUrlParams(service: DocModeProvider, docId: string) {
   const params = new URLSearchParams(location.search);
   const paramMode = params.get('mode');
   if (paramMode) {
     const docMode = paramMode === 'page' ? 'page' : 'edgeless';
-    service.setMode(docMode);
+    service.setPrimaryMode(docMode, docId);
+    service.setEditorMode(docMode);
   }
 }
 
@@ -37,42 +47,38 @@ export async function mountDefaultDocEditor(collection: DocCollection) {
   const app = document.getElementById('app');
   if (!app) return;
 
-  const modeService = mockDocModeService(doc.id);
-  setDocModeFromUrlParams(modeService);
   const editor = new AffineEditorContainer();
   const specs = getExampleSpecs();
-  editor.pageSpecs = [...specs.pageModeSpecs].map(spec => {
-    if (spec.schema.model.flavour === 'affine:page') {
-      spec = patchPageRootSpec(
-        spec as BlockSpec<'affine:page', PageRootService>
-      );
-    }
-    return spec;
-  });
-  editor.edgelessSpecs = [...specs.edgelessModeSpecs].map(spec => {
-    if (spec.schema.model.flavour === 'affine:page') {
-      spec = patchPageRootSpec(
-        spec as BlockSpec<'affine:page', PageRootService>
-      );
-    }
-    return spec;
-  });
+  const refNodeSlotsExtension = RefNodeSlotsExtension();
+  editor.pageSpecs = patchPageRootSpec([
+    refNodeSlotsExtension,
+    ...specs.pageModeSpecs,
+  ]);
+  editor.edgelessSpecs = patchPageRootSpec([
+    refNodeSlotsExtension,
+    ...specs.edgelessModeSpecs,
+  ]);
   editor.doc = doc;
-  editor.mode = modeService.getMode();
-  editor.slots.docLinkClicked.on(({ docId }) => {
-    const target = collection.getDoc(docId);
-    if (!target) {
-      throw new Error(`Failed to jump to doc ${docId}`);
-    }
-    target.load();
-    editor.doc = target;
-  });
-  editor.slots.docUpdated.on(({ newDocId }) => {
-    editor.mode = modeService.getMode(newDocId);
-  });
+  editor.mode = 'page';
+  editor.std
+    .get(RefNodeSlotsProvider)
+    .docLinkClicked.on(({ pageId: docId }) => {
+      const target = collection.getDoc(docId);
+      if (!target) {
+        throw new Error(`Failed to jump to doc ${docId}`);
+      }
+      target.load();
+      editor.doc = target;
+    });
 
   app.append(editor);
   await editor.updateComplete;
+  const modeService = editor.host!.std.get(DocModeProvider);
+  editor.mode = modeService.getPrimaryMode(doc.id);
+  setDocModeFromUrlParams(modeService, doc.id);
+  editor.slots.docUpdated.on(({ newDocId }) => {
+    editor.mode = modeService.getPrimaryMode(newDocId);
+  });
 
   const leftSidePanel = new LeftSidePanel();
 
@@ -104,31 +110,25 @@ export async function mountDefaultDocEditor(collection: DocCollection) {
 
   return editor;
 
-  function patchPageRootSpec(spec: BlockSpec<'affine:page', PageRootService>) {
-    const setup = spec.setup;
-    const newSpec: typeof spec = {
+  function patchPageRootSpec(spec: ExtensionType[]) {
+    const setEditorModeCallBack = editor.switchEditor.bind(editor);
+    const getEditorModeCallback = () => editor.mode;
+    const newSpec: typeof spec = [
       ...spec,
-      setup: (slots, disposable) => {
-        setup?.(slots, disposable);
-        slots.mounted.once(({ service }) => {
-          const pageRootService = service as PageRootService;
-          pageRootService.notificationService =
-            mockNotificationService(pageRootService);
-          pageRootService.quickSearchService =
-            mockQuickSearchService(collection);
-          pageRootService.peekViewService = {
-            peek(target: unknown) {
-              alert('Peek view not implemented in playground');
-              console.log('peek', target);
-              return Promise.resolve();
-            },
-          };
-          pageRootService.docModeService = mockDocModeService(
-            pageRootService.doc.id
-          );
-        });
-      },
-    };
+      DocModeExtension(
+        mockDocModeService(getEditorModeCallback, setEditorModeCallBack)
+      ),
+      ParseDocUrlExtension(mockParseDocUrlService(collection)),
+      NotificationExtension(mockNotificationService(editor)),
+      FontConfigExtension(CommunityCanvasTextFonts),
+      PeekViewExtension({
+        peek(target: unknown) {
+          alert('Peek view not implemented in playground');
+          console.log('peek', target);
+          return Promise.resolve();
+        },
+      }),
+    ];
 
     return newSpec;
   }

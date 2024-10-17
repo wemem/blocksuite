@@ -1,18 +1,17 @@
+import type {
+  FrameBlockModel,
+  ParagraphBlockModel,
+} from '@blocksuite/affine-model';
 import type { BlockModel } from '@blocksuite/store';
 import type { TemplateResult } from 'lit';
 
-import { Slice, Text } from '@blocksuite/store';
-
-import type { DataViewBlockComponent } from '../../../data-view-block/index.js';
-import type { FrameBlockModel } from '../../../frame-block/frame-model.js';
-import type { ParagraphBlockModel } from '../../../paragraph-block/index.js';
-import type { RootBlockComponent } from '../../types.js';
-import type { AffineLinkedDocWidget } from '../linked-doc/index.js';
-
-import { toggleEmbedCardCreateModal } from '../../../_common/components/embed-card/modal/embed-card-create-modal.js';
-import { toast } from '../../../_common/components/toast.js';
-import { textConversionConfigs } from '../../../_common/configs/text-conversion.js';
-import { textFormatConfigs } from '../../../_common/configs/text-format/config.js';
+import {
+  FigmaIcon,
+  GithubIcon,
+  LoomIcon,
+  YoutubeIcon,
+} from '@blocksuite/affine-block-embed';
+import { CanvasElementType } from '@blocksuite/affine-block-surface';
 import {
   ArrowDownBigIcon,
   ArrowUpBigIcon,
@@ -24,36 +23,42 @@ import {
   FrameIcon,
   HeadingIcon,
   ImageIcon20,
-  LinkIcon,
   LinkedDocIcon,
+  LinkIcon,
   NewDocIcon,
   NowIcon,
   PasteIcon,
   TodayIcon,
   TomorrowIcon,
   YesterdayIcon,
-} from '../../../_common/icons/index.js';
-import { REFERENCE_NODE } from '../../../_common/inline/presets/nodes/consts.js';
+} from '@blocksuite/affine-components/icons';
+import {
+  clearMarksOnDiscontinuousInput,
+  getInlineEditorByModel,
+  REFERENCE_NODE,
+  textFormatConfigs,
+} from '@blocksuite/affine-components/rich-text';
+import { toast } from '@blocksuite/affine-components/toast';
 import {
   createDefaultDoc,
-  getBlockComponentByPath,
   getImageFilesFromLocal,
-  getInlineEditorByModel,
   matchFlavours,
   openFileOrFiles,
-} from '../../../_common/utils/index.js';
-import { clearMarksOnDiscontinuousInput } from '../../../_common/utils/inline-editor.js';
+} from '@blocksuite/affine-shared/utils';
+import { viewPresets } from '@blocksuite/data-view/view-presets';
+import { GroupingIcon, TeXIcon } from '@blocksuite/icons/lit';
+import { Slice, Text } from '@blocksuite/store';
+
+import type { DataViewBlockComponent } from '../../../data-view-block/index.js';
+import type { RootBlockComponent } from '../../types.js';
+import type { AffineLinkedDocWidget } from '../linked-doc/index.js';
+
+import { toggleEmbedCardCreateModal } from '../../../_common/components/embed-card/modal/embed-card-create-modal.js';
+import { textConversionConfigs } from '../../../_common/configs/text-conversion.js';
 import { addSiblingAttachmentBlocks } from '../../../attachment-block/utils.js';
-import { GroupingIcon } from '../../../database-block/data-view/common/icons/index.js';
-import { viewPresets } from '../../../database-block/data-view/index.js';
-import { FigmaIcon } from '../../../embed-figma-block/styles.js';
-import { GithubIcon } from '../../../embed-github-block/styles.js';
-import { LoomIcon } from '../../../embed-loom-block/styles.js';
-import { YoutubeIcon } from '../../../embed-youtube-block/styles.js';
 import { addSiblingImageBlock } from '../../../image-block/utils.js';
-import { NoteBlockModel } from '../../../note-block/note-model.js';
+import { LatexBlockComponent } from '../../../latex-block/latex-block.js';
 import { onModelTextUpdated } from '../../../root-block/utils/index.js';
-import { CanvasElementType } from '../../../surface-block/index.js';
 import { getSurfaceBlock } from '../../../surface-ref-block/utils.js';
 import { type SlashMenuTooltip, slashMenuToolTips } from './tooltips/index.js';
 import {
@@ -193,6 +198,68 @@ export const defaultSlashMenuConfig: SlashMenuConfig = {
           !insideEdgelessText(model),
       })),
 
+    {
+      name: 'Inline equation',
+      description: 'Create a equation block.',
+      icon: TeXIcon({
+        width: '20',
+        height: '20',
+      }),
+      alias: ['inlineMath, inlineEquation', 'inlineLatex'],
+      action: ({ rootComponent }) => {
+        const selectionManager = rootComponent.host.selection;
+        const textSelection = selectionManager.filter('text')[0];
+        if (!textSelection || !textSelection.isCollapsed()) return;
+
+        const blockComponent = rootComponent.std.view.getBlock(
+          textSelection.from.blockId
+        );
+        if (!blockComponent) return;
+
+        const richText = blockComponent.querySelector('rich-text');
+        if (!richText) return;
+        const inlineEditor = richText.inlineEditor;
+        if (!inlineEditor) return;
+
+        inlineEditor.insertText(
+          {
+            index: textSelection.from.index,
+            length: 0,
+          },
+          ' '
+        );
+        inlineEditor.formatText(
+          {
+            index: textSelection.from.index,
+            length: 1,
+          },
+          {
+            latex: '',
+          }
+        );
+        inlineEditor.setInlineRange({
+          index: textSelection.from.index,
+          length: 1,
+        });
+
+        inlineEditor
+          .waitForUpdate()
+          .then(async () => {
+            await inlineEditor.waitForUpdate();
+
+            const textPoint = inlineEditor.getTextPoint(
+              textSelection.from.index + 1
+            );
+            if (!textPoint) return;
+            const [text] = textPoint;
+            const latexNode = text.parentElement?.closest('affine-latex-node');
+            if (!latexNode) return;
+            latexNode.toggleEditor();
+          })
+          .catch(console.error);
+      },
+    },
+
     // ---------------------------------------------------------
     { groupName: 'List' },
     ...textConversionConfigs
@@ -231,12 +298,18 @@ export const defaultSlashMenuConfig: SlashMenuConfig = {
       })),
 
     // ---------------------------------------------------------
-    { groupName: 'Page' },
+    {
+      groupName: 'Page',
+      showWhen: ({ model }) =>
+        model.doc.schema.flavourSchemaMap.has('affine:embed-linked-doc'),
+    },
     {
       name: 'New Doc',
       description: 'Start a new document.',
       icon: NewDocIcon,
       tooltip: slashMenuToolTips['New Doc'],
+      showWhen: ({ model }) =>
+        model.doc.schema.flavourSchemaMap.has('affine:embed-linked-doc'),
       action: ({ rootComponent, model }) => {
         const newDoc = createDefaultDoc(rootComponent.doc.collection);
         insertContent(rootComponent.host, model, REFERENCE_NODE, {
@@ -253,10 +326,16 @@ export const defaultSlashMenuConfig: SlashMenuConfig = {
       icon: LinkedDocIcon,
       tooltip: slashMenuToolTips['Linked Doc'],
       alias: ['dual link'],
-      showWhen: ({ rootComponent }) => {
+      showWhen: ({ rootComponent, model }) => {
         const linkedDocWidgetEle =
           rootComponent.widgetComponents['affine-linked-doc-widget'];
         if (!linkedDocWidgetEle) return false;
+
+        const hasLinkedDocSchema = model.doc.schema.flavourSchemaMap.has(
+          'affine:embed-linked-doc'
+        );
+        if (!hasLinkedDocSchema) return false;
+
         if (!('showLinkedDocPopover' in linkedDocWidgetEle)) {
           console.warn(
             'You may not have correctly implemented the linkedDoc widget! "showLinkedDoc(model)" method not found on widget'
@@ -305,7 +384,8 @@ export const defaultSlashMenuConfig: SlashMenuConfig = {
         const imageFiles = await getImageFilesFromLocal();
         if (!imageFiles.length) return;
 
-        const imageService = rootComponent.host.spec.getService('affine:image');
+        const imageService = rootComponent.std.getService('affine:image');
+        if (!imageService) return;
         const maxFileSize = imageService.maxFileSize;
 
         addSiblingImageBlock(
@@ -354,7 +434,7 @@ export const defaultSlashMenuConfig: SlashMenuConfig = {
         if (!file) return;
 
         const attachmentService =
-          rootComponent.host.spec.getService('affine:attachment');
+          rootComponent.std.getService('affine:attachment');
         if (!attachmentService) return;
         const maxFileSize = attachmentService.maxFileSize;
 
@@ -461,6 +541,43 @@ export const defaultSlashMenuConfig: SlashMenuConfig = {
       },
     },
 
+    {
+      name: 'Equation',
+      description: 'Create a equation block.',
+      icon: TeXIcon({
+        width: '20',
+        height: '20',
+      }),
+      alias: ['mathBlock, equationBlock', 'latexBlock'],
+      action: ({ rootComponent, model }) => {
+        const doc = rootComponent.doc;
+        const parent = doc.getParent(model);
+        if (!parent) return;
+
+        const index = parent.children.indexOf(model);
+        if (index === -1) return;
+
+        const id = doc.addBlock(
+          'affine:latex',
+          {
+            latex: '',
+          },
+          parent,
+          index + 1
+        );
+        rootComponent.host.updateComplete
+          .then(async () => {
+            const blockComponent = rootComponent.std.view.getBlock(id);
+            if (!(blockComponent instanceof LatexBlockComponent)) return;
+
+            await blockComponent.updateComplete;
+
+            blockComponent.toggleEditor();
+          })
+          .catch(console.error);
+      },
+    },
+
     // TODO-slash: Linear
 
     // TODO-slash: Group & Frame explorer
@@ -470,21 +587,20 @@ export const defaultSlashMenuConfig: SlashMenuConfig = {
       const { doc } = rootComponent;
 
       const surfaceModel = getSurfaceBlock(doc);
-      const noteModel = doc.getParent(model);
-      if (!(noteModel instanceof NoteBlockModel)) return [];
-
       if (!surfaceModel) return [];
+
+      const parent = doc.getParent(model);
+      if (!parent) return [];
 
       const frameModels = doc
         .getBlocksByFlavour('affine:frame')
         .map(block => block.model) as FrameBlockModel[];
-
       const frameItems = frameModels.map<SlashMenuActionItem>(frameModel => ({
         name: 'Frame: ' + frameModel.title,
         icon: FrameIcon,
         showWhen: () => !insideDatabase(model),
         action: () => {
-          const insertIdx = noteModel.children.indexOf(model);
+          const insertIdx = parent.children.indexOf(model);
           const surfaceRefProps = {
             flavour: 'affine:surface-ref',
             reference: frameModel.id,
@@ -498,7 +614,7 @@ export const defaultSlashMenuConfig: SlashMenuConfig = {
           );
 
           if (
-            matchFlavours(model, ['affine:paragraph']) &&
+            matchFlavours(model, ['affine:paragraph', 'affine:list']) &&
             model.text.length === 0
           ) {
             doc.deleteBlock(model);
@@ -512,11 +628,10 @@ export const defaultSlashMenuConfig: SlashMenuConfig = {
 
       const groupItems = groupElements.map(element => ({
         name: 'Group: ' + element.get('title'),
-        icon: GroupingIcon,
+        icon: GroupingIcon(),
         action: () => {
           const { doc } = rootComponent;
-          const noteModel = doc.getParent(model) as NoteBlockModel;
-          const insertIdx = noteModel.children.indexOf(model);
+          const insertIdx = parent.children.indexOf(model);
           const surfaceRefProps = {
             flavour: 'affine:surface-ref',
             reference: element.get('id'),
@@ -530,7 +645,7 @@ export const defaultSlashMenuConfig: SlashMenuConfig = {
           );
 
           if (
-            matchFlavours(model, ['affine:paragraph']) &&
+            matchFlavours(model, ['affine:paragraph', 'affine:list']) &&
             model.text.length === 0
           ) {
             doc.deleteBlock(model);
@@ -622,12 +737,13 @@ export const defaultSlashMenuConfig: SlashMenuConfig = {
         if (!id) {
           return;
         }
-        const service = rootComponent.std.spec.getService('affine:database');
+        const service = rootComponent.std.getService('affine:database');
+        if (!service) return;
         service.initDatabaseBlock(
           rootComponent.doc,
           model,
           id,
-          viewPresets.tableViewConfig,
+          viewPresets.tableViewMeta.type,
           false
         );
         tryRemoveEmptyLine(model);
@@ -657,11 +773,10 @@ export const defaultSlashMenuConfig: SlashMenuConfig = {
         const dataViewModel = rootComponent.doc.getBlock(id)!;
         // eslint-disable-next-line @typescript-eslint/no-floating-promises
         Promise.resolve().then(() => {
-          const dataView = getBlockComponentByPath(
-            rootComponent.host,
-            dataViewModel.model.id
-          ) as DataViewBlockComponent;
-          dataView.dataSource.viewDataAdd('table');
+          const dataView = rootComponent.std.view.getBlock(
+            dataViewModel.id
+          ) as DataViewBlockComponent | null;
+          dataView?.dataSource.viewManager.viewAdd('table');
         });
         tryRemoveEmptyLine(model);
       },
@@ -681,12 +796,13 @@ export const defaultSlashMenuConfig: SlashMenuConfig = {
         if (!id) {
           return;
         }
-        const service = rootComponent.std.spec.getService('affine:database');
+        const service = rootComponent.std.getService('affine:database');
+        if (!service) return;
         service.initDatabaseBlock(
           rootComponent.doc,
           model,
           id,
-          viewPresets.kanbanViewConfig,
+          viewPresets.kanbanViewMeta.type,
           false
         );
         tryRemoveEmptyLine(model);

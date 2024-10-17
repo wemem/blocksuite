@@ -1,8 +1,6 @@
-/* eslint-disable @typescript-eslint/no-non-null-assertion */
 import { expect } from '@playwright/test';
 
 import {
-  SHORT_KEY,
   activeEmbed,
   activeNoteInEdgeless,
   addNoteByClick,
@@ -19,6 +17,7 @@ import {
   getIndexCoordinate,
   getInlineSelectionIndex,
   getInlineSelectionText,
+  getPageSnapshot,
   getRichTextBoundingBox,
   getSelectedText,
   getSelectedTextByInlineEditor,
@@ -44,6 +43,7 @@ import {
   scrollToTop,
   selectAllByKeyboard,
   setInlineRangeInInlineEditor,
+  SHORT_KEY,
   switchEditorMode,
   type,
   undoByKeyboard,
@@ -58,7 +58,6 @@ import {
   assertNativeSelectionRangeCount,
   assertRichTextInlineRange,
   assertRichTexts,
-  assertStoreMatchJSX,
   assertTitle,
 } from '../utils/asserts.js';
 import { test } from '../utils/playwright.js';
@@ -72,16 +71,19 @@ test('click on blank area', async ({ page }) => {
   const box123 = await getRichTextBoundingBox(page, '2');
   const inside123 = { x: box123.left, y: box123.top + 5 };
   await page.mouse.click(inside123.x, inside123.y);
+  await waitNextFrame(page);
   await assertRichTextInlineRange(page, 0, 0, 0);
 
   const box456 = await getRichTextBoundingBox(page, '3');
   const inside456 = { x: box456.left, y: box456.top + 5 };
   await page.mouse.click(inside456.x, inside456.y);
+  await waitNextFrame(page);
   await assertRichTextInlineRange(page, 1, 0, 0);
 
   const box789 = await getRichTextBoundingBox(page, '4');
   const inside789 = { x: box789.left, y: box789.bottom - 5 };
   await page.mouse.click(inside789.x, inside789.y);
+  await waitNextFrame(page);
   await assertRichTextInlineRange(page, 2, 0, 0);
 });
 
@@ -103,9 +105,9 @@ test('native range delete', async ({ page }) => {
   await assertRichTexts(page, ['']);
 });
 
-test('native range delete with indent', async ({ page }) => {
+test('native range delete with indent', async ({ page }, testInfo) => {
   await enterPlaygroundRoom(page);
-  const { noteId } = await initEmptyParagraphState(page);
+  await initEmptyParagraphState(page);
 
   await focusRichText(page);
   await type(page, '123');
@@ -137,55 +139,8 @@ test('native range delete with indent', async ({ page }) => {
   //   def
   //     ghi
 
-  await assertStoreMatchJSX(
-    page,
-    `
-<affine:note
-  prop:background="--affine-note-background-blue"
-  prop:displayMode="both"
-  prop:edgeless={
-    Object {
-      "style": Object {
-        "borderRadius": 0,
-        "borderSize": 4,
-        "borderStyle": "none",
-        "shadowType": "--affine-note-shadow-sticker",
-      },
-    }
-  }
-  prop:hidden={false}
-  prop:index="a0"
->
-  <affine:paragraph
-    prop:text="123"
-    prop:type="text"
-  >
-    <affine:paragraph
-      prop:text="456"
-      prop:type="text"
-    >
-      <affine:paragraph
-        prop:text="789"
-        prop:type="text"
-      />
-    </affine:paragraph>
-  </affine:paragraph>
-  <affine:paragraph
-    prop:text="abc"
-    prop:type="text"
-  >
-    <affine:paragraph
-      prop:text="def"
-      prop:type="text"
-    >
-      <affine:paragraph
-        prop:text="ghi"
-        prop:type="text"
-      />
-    </affine:paragraph>
-  </affine:paragraph>
-</affine:note>`,
-    noteId
+  expect(await getPageSnapshot(page, true)).toMatchSnapshot(
+    `${testInfo.title}_init.json`
   );
 
   await dragBetweenIndices(page, [0, 2], [4, 1]);
@@ -198,120 +153,20 @@ test('native range delete with indent', async ({ page }) => {
   //     ghi
 
   await pressBackspace(page);
-  await assertStoreMatchJSX(
-    page,
-    `
-<affine:note
-  prop:background="--affine-note-background-blue"
-  prop:displayMode="both"
-  prop:edgeless={
-    Object {
-      "style": Object {
-        "borderRadius": 0,
-        "borderSize": 4,
-        "borderStyle": "none",
-        "shadowType": "--affine-note-shadow-sticker",
-      },
-    }
-  }
-  prop:hidden={false}
-  prop:index="a0"
->
-  <affine:paragraph
-    prop:text="12ef"
-    prop:type="text"
-  />
-  <affine:paragraph
-    prop:text="ghi"
-    prop:type="text"
-  />
-</affine:note>`,
-    noteId
+  expect(await getPageSnapshot(page, true)).toMatchSnapshot(
+    `${testInfo.title}_after_backspace.json`
   );
 
   await waitNextFrame(page);
   await undoByKeyboard(page);
 
-  await assertStoreMatchJSX(
-    page,
-    `
-<affine:note
-  prop:background="--affine-note-background-blue"
-  prop:displayMode="both"
-  prop:edgeless={
-    Object {
-      "style": Object {
-        "borderRadius": 0,
-        "borderSize": 4,
-        "borderStyle": "none",
-        "shadowType": "--affine-note-shadow-sticker",
-      },
-    }
-  }
-  prop:hidden={false}
-  prop:index="a0"
->
-  <affine:paragraph
-    prop:text="123"
-    prop:type="text"
-  >
-    <affine:paragraph
-      prop:text="456"
-      prop:type="text"
-    >
-      <affine:paragraph
-        prop:text="789"
-        prop:type="text"
-      />
-    </affine:paragraph>
-  </affine:paragraph>
-  <affine:paragraph
-    prop:text="abc"
-    prop:type="text"
-  >
-    <affine:paragraph
-      prop:text="def"
-      prop:type="text"
-    >
-      <affine:paragraph
-        prop:text="ghi"
-        prop:type="text"
-      />
-    </affine:paragraph>
-  </affine:paragraph>
-</affine:note>`,
-    noteId
+  expect(await getPageSnapshot(page, true)).toMatchSnapshot(
+    `${testInfo.title}_after_undo.json`
   );
+
   await redoByKeyboard(page);
-  await assertStoreMatchJSX(
-    page,
-    `
-<affine:note
-  prop:background="--affine-note-background-blue"
-  prop:displayMode="both"
-  prop:edgeless={
-    Object {
-      "style": Object {
-        "borderRadius": 0,
-        "borderSize": 4,
-        "borderStyle": "none",
-        "shadowType": "--affine-note-shadow-sticker",
-      },
-    }
-  }
-  prop:hidden={false}
-  prop:index="a0"
->
-  <affine:paragraph
-    prop:text="12ef"
-    prop:type="text"
-  />
-  <affine:paragraph
-    prop:text="ghi"
-    prop:type="text"
-  />
-</affine:note>`,
-    noteId
+  expect(await getPageSnapshot(page, true)).toMatchSnapshot(
+    `${testInfo.title}_after_redo.json`
   );
 });
 
@@ -408,8 +263,7 @@ test('native range selection backwards by forwardDelete', async ({ page }) => {
 
   await waitNextFrame(page);
   await undoByKeyboard(page);
-  // FIXME
-  // await assertRichTexts(page, ['123', '456', '789']);
+  await assertRichTexts(page, ['123', '456', '789']);
 
   await redoByKeyboard(page);
   await assertRichTexts(page, ['']);
@@ -1275,7 +1129,9 @@ test('should select texts on dragging around the page', async ({ page }) => {
   await assertRichTexts(page, ['123', '45']);
 });
 
-test('should indent native multi-selection block', async ({ page }) => {
+test('should indent native multi-selection block', async ({
+  page,
+}, testInfo) => {
   await enterPlaygroundRoom(page);
   await initEmptyParagraphState(page);
   await initThreeParagraphs(page);
@@ -1292,45 +1148,14 @@ test('should indent native multi-selection block', async ({ page }) => {
 
   await page.keyboard.press('Tab');
 
-  await assertStoreMatchJSX(
-    page,
-    `
-<affine:page>
-  <affine:note
-    prop:background="--affine-note-background-blue"
-    prop:displayMode="both"
-    prop:edgeless={
-      Object {
-        "style": Object {
-          "borderRadius": 0,
-          "borderSize": 4,
-          "borderStyle": "none",
-          "shadowType": "--affine-note-shadow-sticker",
-        },
-      }
-    }
-    prop:hidden={false}
-    prop:index="a0"
-  >
-    <affine:paragraph
-      prop:text="123"
-      prop:type="text"
-    >
-      <affine:paragraph
-        prop:text="456"
-        prop:type="text"
-      />
-      <affine:paragraph
-        prop:text="789"
-        prop:type="text"
-      />
-    </affine:paragraph>
-  </affine:note>
-</affine:page>`
+  expect(await getPageSnapshot(page, true)).toMatchSnapshot(
+    `${testInfo.title}_after_tab.json`
   );
 });
 
-test('should unindent native multi-selection block', async ({ page }) => {
+test('should unindent native multi-selection block', async ({
+  page,
+}, testInfo) => {
   await enterPlaygroundRoom(page);
   await initEmptyParagraphState(page);
   await initThreeParagraphs(page);
@@ -1347,41 +1172,8 @@ test('should unindent native multi-selection block', async ({ page }) => {
 
   await page.keyboard.press('Tab');
 
-  await assertStoreMatchJSX(
-    page,
-    `
-<affine:page>
-  <affine:note
-    prop:background="--affine-note-background-blue"
-    prop:displayMode="both"
-    prop:edgeless={
-      Object {
-        "style": Object {
-          "borderRadius": 0,
-          "borderSize": 4,
-          "borderStyle": "none",
-          "shadowType": "--affine-note-shadow-sticker",
-        },
-      }
-    }
-    prop:hidden={false}
-    prop:index="a0"
-  >
-    <affine:paragraph
-      prop:text="123"
-      prop:type="text"
-    >
-      <affine:paragraph
-        prop:text="456"
-        prop:type="text"
-      />
-      <affine:paragraph
-        prop:text="789"
-        prop:type="text"
-      />
-    </affine:paragraph>
-  </affine:note>
-</affine:page>`
+  expect(await getPageSnapshot(page, true)).toMatchSnapshot(
+    `${testInfo.title}_after_tab.json`
   );
 
   box456 = await getRichTextBoundingBox(page, '3');
@@ -1395,40 +1187,8 @@ test('should unindent native multi-selection block', async ({ page }) => {
 
   await pressShiftTab(page);
 
-  await assertStoreMatchJSX(
-    page,
-    `
-<affine:page>
-  <affine:note
-    prop:background="--affine-note-background-blue"
-    prop:displayMode="both"
-    prop:edgeless={
-      Object {
-        "style": Object {
-          "borderRadius": 0,
-          "borderSize": 4,
-          "borderStyle": "none",
-          "shadowType": "--affine-note-shadow-sticker",
-        },
-      }
-    }
-    prop:hidden={false}
-    prop:index="a0"
-  >
-    <affine:paragraph
-      prop:text="123"
-      prop:type="text"
-    />
-    <affine:paragraph
-      prop:text="456"
-      prop:type="text"
-    />
-    <affine:paragraph
-      prop:text="789"
-      prop:type="text"
-    />
-  </affine:note>
-</affine:page>`
+  expect(await getPageSnapshot(page, true)).toMatchSnapshot(
+    `${testInfo.title}_after_shift_tab.json`
   );
 });
 
@@ -1873,16 +1633,24 @@ test('auto-scroll when creating a new paragraph-block by pressing enter', async 
   await initEmptyParagraphState(page);
 
   await focusRichText(page);
-  await pressEnter(page, 50);
 
-  const scrollTop = await page.evaluate(() => {
-    const viewport = document.querySelector('.affine-page-viewport');
-    if (!viewport) {
-      throw new Error();
-    }
-    return viewport.scrollTop;
-  });
-  expect(scrollTop).toBeGreaterThan(1000);
+  const getScrollTop = async () => {
+    return page.evaluate(() => {
+      const viewport = document.querySelector('.affine-page-viewport');
+      if (!viewport) {
+        throw new Error();
+      }
+      return viewport.scrollTop;
+    });
+  };
+
+  await pressEnter(page, 30);
+  const oldScrollTop = await getScrollTop();
+
+  await pressEnter(page, 30);
+  const newScrollTop = await getScrollTop();
+
+  expect(newScrollTop).toBeGreaterThan(oldScrollTop);
 });
 
 test('Use arrow up and down to select two types of block', async ({ page }) => {

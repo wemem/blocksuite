@@ -1,39 +1,45 @@
+import type { RichText } from '@blocksuite/affine-components/rich-text';
+import type { ShapeElementModel } from '@blocksuite/affine-model';
+
+import { CommonUtils, TextUtils } from '@blocksuite/affine-block-surface';
+import { MindmapElementModel, TextResizing } from '@blocksuite/affine-model';
+import { ThemeObserver } from '@blocksuite/affine-shared/theme';
 import {
-  RangeManager,
+  RANGE_SYNC_EXCLUDE_ATTR,
   ShadowlessElement,
-  WithDisposable,
 } from '@blocksuite/block-std';
-import { Bound, Vec } from '@blocksuite/global/utils';
-import { assertExists } from '@blocksuite/global/utils';
+import {
+  assertExists,
+  Bound,
+  Vec,
+  WithDisposable,
+} from '@blocksuite/global/utils';
 import { DocCollection } from '@blocksuite/store';
 import { html, nothing } from 'lit';
-import { customElement, property, query } from 'lit/decorators.js';
+import { property, query } from 'lit/decorators.js';
 import { styleMap } from 'lit/directives/style-map.js';
 
-import type { RichText } from '../../../../_common/components/rich-text/rich-text.js';
 import type { EdgelessRootBlockComponent } from '../../edgeless-root-block.js';
 
-import {
-  getNearestTranslation,
-  isElementOutsideViewport,
-} from '../../../../_common/edgeless/mindmap/index.js';
-import { ThemeObserver } from '../../../../_common/theme/theme-observer.js';
-import { TextResizing } from '../../../../surface-block/consts.js';
-import {
-  MindmapElementModel,
-  type ShapeElementModel,
-} from '../../../../surface-block/element-model/index.js';
-import { toRadian } from '../../../../surface-block/index.js';
-import { wrapFontFamily } from '../../../../surface-block/utils/font.js';
 import { getSelectedRect } from '../../utils/query.js';
 
-@customElement('edgeless-shape-text-editor')
+const { toRadian } = CommonUtils;
+
 export class EdgelessShapeTextEditor extends WithDisposable(ShadowlessElement) {
   private _keeping = false;
 
   private _lastXYWH = '';
 
   private _resizeObserver: ResizeObserver | null = null;
+
+  get inlineEditor() {
+    assertExists(this.richText.inlineEditor);
+    return this.richText.inlineEditor;
+  }
+
+  get inlineEditorContainer() {
+    return this.inlineEditor.rootElement;
+  }
 
   private _initMindmapKeyBindings() {
     if (!this.element.surface.isInMindmap(this.element.id)) {
@@ -45,68 +51,24 @@ export class EdgelessShapeTextEditor extends WithDisposable(ShadowlessElement) {
     this._disposables.addFromEvent(this, 'keydown', evt => {
       switch (evt.key) {
         case 'Enter': {
+          evt.stopPropagation();
           if (evt.shiftKey || evt.isComposing) return;
 
-          evt.preventDefault();
-          const edgeless = this.edgeless;
-          const element = this.element;
-          const mindmap = this.element.group as MindmapElementModel;
-          const parent = mindmap.getParentNode(element.id) ?? element;
-          const id = mindmap.addNode(parent.id);
-
-          requestAnimationFrame(() => {
-            this.element = edgeless.service.getElementById(
-              id
-            ) as ShapeElementModel;
-            const element = this.element;
-            this.mountEditor?.(element, edgeless);
-
-            if (isElementOutsideViewport(service.viewport, element, [90, 20])) {
-              const [dx, dy] = getNearestTranslation(
-                edgeless.service.viewport,
-                element,
-                [100, 20]
-              );
-
-              edgeless.service.viewport.smoothTranslate(
-                service.viewport.centerX - dx,
-                service.viewport.centerY + dy
-              );
-            }
-          });
-
           (this.ownerDocument.activeElement as HTMLElement).blur();
+          service.selection.set({
+            elements: [this.element.id],
+            editing: false,
+          });
           break;
         }
+        case 'Esc':
         case 'Tab': {
-          evt.preventDefault();
-          const edgeless = this.edgeless;
-          const element = this.element;
-          const mindmap = this.element.group as MindmapElementModel;
-          const id = mindmap.addNode(element.id);
-
-          requestAnimationFrame(() => {
-            this.element = edgeless.service.getElementById(
-              id
-            ) as ShapeElementModel;
-            const element = this.element;
-            this.mountEditor?.(element, edgeless);
-
-            if (isElementOutsideViewport(service.viewport, element, [90, 20])) {
-              const [dx, dy] = getNearestTranslation(
-                edgeless.service.viewport,
-                element,
-                [100, 20]
-              );
-
-              edgeless.service.viewport.smoothTranslate(
-                service.viewport.centerX - dx,
-                service.viewport.centerY + dy
-              );
-            }
-          });
-
+          evt.stopPropagation();
           (this.ownerDocument.activeElement as HTMLElement).blur();
+          service.selection.set({
+            elements: [this.element.id],
+            editing: false,
+          });
           break;
         }
       }
@@ -129,8 +91,6 @@ export class EdgelessShapeTextEditor extends WithDisposable(ShadowlessElement) {
     }
 
     this.element.textDisplay = true;
-    this.element.group instanceof MindmapElementModel &&
-      this.element.group.layout();
 
     this.remove();
     this.edgeless.service.selection.set({
@@ -152,8 +112,9 @@ export class EdgelessShapeTextEditor extends WithDisposable(ShadowlessElement) {
     if (
       (containerHeight !== this.element.h &&
         textResizing === TextResizing.AUTO_HEIGHT) ||
-      (textResizing === TextResizing.AUTO_WIDTH &&
-        containerWidth !== this.element.w)
+      (textResizing === TextResizing.AUTO_WIDTH_AND_HEIGHT &&
+        (containerWidth !== this.element.w ||
+          containerHeight !== this.element.h))
     ) {
       const [leftTopX, leftTopY] = Vec.rotWith(
         [this.richText.offsetLeft, this.richText.offsetTop],
@@ -168,7 +129,7 @@ export class EdgelessShapeTextEditor extends WithDisposable(ShadowlessElement) {
         xywh: new Bound(
           modelLeftTopX,
           modelLeftTopY,
-          textResizing === TextResizing.AUTO_WIDTH
+          textResizing === TextResizing.AUTO_WIDTH_AND_HEIGHT
             ? containerWidth
             : this.element.w,
           containerHeight
@@ -187,7 +148,7 @@ export class EdgelessShapeTextEditor extends WithDisposable(ShadowlessElement) {
 
   override connectedCallback() {
     super.connectedCallback();
-    this.setAttribute(RangeManager.rangeSyncExcludeAttr, 'true');
+    this.setAttribute(RANGE_SYNC_EXCLUDE_ATTR, 'true');
   }
 
   override firstUpdated(): void {
@@ -284,7 +245,7 @@ export class EdgelessShapeTextEditor extends WithDisposable(ShadowlessElement) {
       leftTopX,
       leftTopY
     );
-    const autoWidth = textResizing === TextResizing.AUTO_WIDTH;
+    const autoWidth = textResizing === TextResizing.AUTO_WIDTH_AND_HEIGHT;
     const color = ThemeObserver.generateColorProperty(
       this.element.color,
       '#000000'
@@ -295,22 +256,24 @@ export class EdgelessShapeTextEditor extends WithDisposable(ShadowlessElement) {
       left: x + 'px',
       top: y + 'px',
       width:
-        textResizing > TextResizing.AUTO_WIDTH
+        textResizing === TextResizing.AUTO_HEIGHT
           ? rect.width + 'px'
           : 'fit-content',
       // override rich-text style (height: 100%)
       height: 'initial',
       minHeight:
-        textResizing === TextResizing.AUTO_WIDTH ? '1em' : `${rect.height}px`,
+        textResizing === TextResizing.AUTO_WIDTH_AND_HEIGHT
+          ? '1em'
+          : `${rect.height}px`,
       maxWidth:
-        textResizing === TextResizing.AUTO_WIDTH
+        textResizing === TextResizing.AUTO_WIDTH_AND_HEIGHT
           ? this.element.maxWidth
             ? `${this.element.maxWidth}px`
             : undefined
           : undefined,
       boxSizing: 'border-box',
       fontSize: this.element.fontSize + 'px',
-      fontFamily: wrapFontFamily(this.element.fontFamily),
+      fontFamily: TextUtils.wrapFontFamily(this.element.fontFamily),
       fontWeight: this.element.fontWeight,
       lineHeight: 'normal',
       outline: 'none',
@@ -355,15 +318,6 @@ export class EdgelessShapeTextEditor extends WithDisposable(ShadowlessElement) {
 
   setKeeping(keeping: boolean) {
     this._keeping = keeping;
-  }
-
-  get inlineEditor() {
-    assertExists(this.richText.inlineEditor);
-    return this.richText.inlineEditor;
-  }
-
-  get inlineEditorContainer() {
-    return this.inlineEditor.rootElement;
   }
 
   @property({ attribute: false })

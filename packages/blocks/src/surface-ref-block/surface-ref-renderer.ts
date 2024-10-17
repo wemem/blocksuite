@@ -1,25 +1,29 @@
+import type {
+  SurfaceBlockModel,
+  SurfaceBlockService,
+} from '@blocksuite/affine-block-surface';
+import type { Color, NoteBlockModel } from '@blocksuite/affine-model';
 import type { BlockStdScope } from '@blocksuite/block-std';
 import type { Doc } from '@blocksuite/store';
 
+import {
+  CanvasRenderer,
+  elementRenderers,
+} from '@blocksuite/affine-block-surface';
+import { ThemeObserver } from '@blocksuite/affine-shared/theme';
+import { GfxControllerIdentifier, Viewport } from '@blocksuite/block-std/gfx';
 import { DisposableGroup, Slot } from '@blocksuite/global/utils';
 
-import type { NoteBlockModel } from '../note-block/index.js';
-import type { Color } from '../surface-block/consts.js';
-import type { SurfaceBlockModel } from '../surface-block/surface-model.js';
-
-import { ThemeObserver } from '../_common/theme/theme-observer.js';
-import { Viewport } from '../root-block/edgeless/utils/viewport.js';
-import { Renderer } from '../surface-block/index.js';
 import { getSurfaceBlock } from './utils.js';
 
 export class SurfaceRefRenderer {
-  protected _disposables = new DisposableGroup();
-
   private _surfaceModel: SurfaceBlockModel | null = null;
 
-  private readonly _surfaceRenderer: Renderer;
+  private readonly _surfaceRenderer: CanvasRenderer;
 
   private readonly _viewport: Viewport;
+
+  protected _disposables = new DisposableGroup();
 
   slots = {
     surfaceRendererInit: new Slot(),
@@ -28,6 +32,22 @@ export class SurfaceRefRenderer {
     mounted: new Slot(),
     unmounted: new Slot(),
   };
+
+  get surfaceModel() {
+    return this._surfaceModel;
+  }
+
+  get surfaceRenderer() {
+    return this._surfaceRenderer;
+  }
+
+  get surfaceService() {
+    return this.std.getService('affine:surface') as SurfaceBlockService;
+  }
+
+  get viewport() {
+    return this._viewport;
+  }
 
   constructor(
     readonly id: string,
@@ -40,9 +60,10 @@ export class SurfaceRefRenderer {
     }
   ) {
     const viewport = new Viewport();
-    const renderer = new Renderer({
+    const renderer = new CanvasRenderer({
       viewport,
-      layerManager: this.surfaceService.layer,
+      layerManager: std.get(GfxControllerIdentifier).layer,
+      gridManager: std.get(GfxControllerIdentifier).grid,
       enableStackingCanvas: options.enableStackingCanvas,
       provider: {
         generateColorProperty: (color: Color, fallback: string) =>
@@ -53,6 +74,7 @@ export class SurfaceRefRenderer {
         getPropertyValue: (property: string) =>
           ThemeObserver.getPropertyValue(property),
       },
+      elementRenderers,
     });
 
     this._surfaceRenderer = renderer;
@@ -113,21 +135,5 @@ export class SurfaceRefRenderer {
   unmount() {
     this._disposables.dispose();
     this.slots.unmounted.emit();
-  }
-
-  get surfaceModel() {
-    return this._surfaceModel;
-  }
-
-  get surfaceRenderer() {
-    return this._surfaceRenderer;
-  }
-
-  get surfaceService() {
-    return this.std.spec.getService('affine:surface');
-  }
-
-  get viewport() {
-    return this._viewport;
   }
 }

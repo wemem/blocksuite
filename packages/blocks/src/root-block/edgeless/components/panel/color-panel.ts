@@ -1,11 +1,15 @@
-import { LitElement, css, html, nothing } from 'lit';
-import { customElement, property } from 'lit/decorators.js';
+import { TransparentIcon } from '@blocksuite/affine-components/icons';
+import {
+  LINE_COLORS,
+  LineColor,
+  NoteBackgroundColor,
+  ShapeFillColor,
+} from '@blocksuite/affine-model';
+import { ThemeObserver } from '@blocksuite/affine-shared/theme';
+import { css, html, LitElement, nothing } from 'lit';
+import { property } from 'lit/decorators.js';
 import { repeat } from 'lit/directives/repeat.js';
 import { styleMap } from 'lit/directives/style-map.js';
-
-import { TransparentIcon } from '../../../../_common/icons/index.js';
-import { ThemeObserver } from '../../../../_common/theme/theme-observer.js';
-import { createZodUnion } from '../../../../_common/utils/index.js';
 
 export class ColorEvent extends Event {
   detail: string;
@@ -23,43 +27,23 @@ export class ColorEvent extends Event {
   }
 }
 
-export const LINE_COLORS = [
-  '--affine-palette-line-yellow',
-  '--affine-palette-line-orange',
-  '--affine-palette-line-red',
-  '--affine-palette-line-magenta',
-  '--affine-palette-line-purple',
-  '--affine-palette-line-blue',
-  '--affine-palette-line-teal',
-  '--affine-palette-line-green',
-  '--affine-palette-line-black',
-  '--affine-palette-line-grey',
-  '--affine-palette-line-white',
-] as const;
-
-export const LineColorsSchema = createZodUnion(LINE_COLORS);
-
 export const GET_DEFAULT_LINE_COLOR = () =>
-  ThemeObserver.mode === 'dark' ? LINE_COLORS[10] : LINE_COLORS[8];
-
-export const GET_DEFAULT_TEXT_COLOR = () => LINE_COLORS[5];
-
-export const DEFAULT_BRUSH_COLOR = LINE_COLORS[5];
-export const DEFAULT_CONNECTOR_COLOR = LINE_COLORS[9];
+  ThemeObserver.mode === 'dark' ? LineColor.White : LineColor.Black;
 
 export function isTransparent(color: string) {
   return color.toLowerCase().endsWith('transparent');
 }
 
 function isSameColorWithBackground(color: string) {
-  return [
-    '--affine-note-background-black',
-    '--affine-note-background-white',
-    '--affine-palette-line-black',
-    '--affine-palette-line-white',
-    '--affine-palette-shape-black',
-    '--affine-palette-shape-white',
-  ].includes(color.toLowerCase());
+  const colors: string[] = [
+    LineColor.Black,
+    LineColor.White,
+    NoteBackgroundColor.Black,
+    NoteBackgroundColor.White,
+    ShapeFillColor.Black,
+    ShapeFillColor.White,
+  ];
+  return colors.includes(color.toLowerCase());
 }
 
 function TransparentColor(hollowCircle = false) {
@@ -168,7 +152,6 @@ export function ColorUnit(
   `;
 }
 
-@customElement('edgeless-color-button')
 export class EdgelessColorButton extends LitElement {
   static override styles = css`
     :host {
@@ -188,6 +171,11 @@ export class EdgelessColorButton extends LitElement {
     }
   `;
 
+  get preprocessColor() {
+    const color = this.color;
+    return color.startsWith('--') ? `var(${color})` : color;
+  }
+
   override render() {
     const { color, hollowCircle, letter } = this;
     const additionIcon = AdditionIcon(color, !!hollowCircle);
@@ -206,11 +194,6 @@ export class EdgelessColorButton extends LitElement {
     >
       ${additionIcon}
     </div>`;
-  }
-
-  get preprocessColor() {
-    const color = this.color;
-    return color.startsWith('--') ? `var(${color})` : color;
   }
 
   @property({ attribute: false })
@@ -255,7 +238,6 @@ export const colorContainerStyles = css`
   }
 `;
 
-@customElement('edgeless-color-panel')
 export class EdgelessColorPanel extends LitElement {
   static override styles = css`
     :host {
@@ -268,6 +250,12 @@ export class EdgelessColorPanel extends LitElement {
 
     ${colorContainerStyles}
   `;
+
+  get palettes() {
+    return this.hasTransparent
+      ? ['--affine-palette-transparent', ...this.options]
+      : this.options;
+  }
 
   onSelect(value: string) {
     this.dispatchEvent(
@@ -307,12 +295,6 @@ export class EdgelessColorPanel extends LitElement {
     `;
   }
 
-  get palettes() {
-    return this.hasTransparent
-      ? ['--affine-palette-transparent', ...this.options]
-      : this.options;
-  }
-
   @property({ attribute: false })
   accessor hasTransparent: boolean = true;
 
@@ -332,7 +314,6 @@ export class EdgelessColorPanel extends LitElement {
   accessor value: string | null = null;
 }
 
-@customElement('edgeless-text-color-icon')
 export class EdgelessTextColorIcon extends LitElement {
   static override styles = css`
     :host {
@@ -343,6 +324,11 @@ export class EdgelessTextColorIcon extends LitElement {
       height: 20px;
     }
   `;
+
+  get preprocessColor() {
+    const color = this.color;
+    return color.startsWith('--') ? `var(${color})` : color;
+  }
 
   override render() {
     return html`
@@ -369,11 +355,6 @@ export class EdgelessTextColorIcon extends LitElement {
         />
       </svg>
     `;
-  }
-
-  get preprocessColor() {
-    const color = this.color;
-    return color.startsWith('--') ? `var(${color})` : color;
   }
 
   @property({ attribute: false })

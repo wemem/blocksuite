@@ -1,13 +1,11 @@
-import type {
-  GroupElementModel,
-  MindmapElementModel,
-} from '@blocksuite/blocks';
+import type { MindmapElementModel } from '@blocksuite/affine-model';
 
 import {
   type EdgelessRootBlockComponent,
+  type GroupElementModel,
+  LayoutType,
   NoteDisplayMode,
 } from '@blocksuite/blocks';
-import { LayoutType } from '@blocksuite/blocks';
 import { DocCollection } from '@blocksuite/store';
 import { beforeEach, describe, expect, test } from 'vitest';
 

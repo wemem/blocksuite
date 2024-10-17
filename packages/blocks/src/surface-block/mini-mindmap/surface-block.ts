@@ -1,31 +1,41 @@
+import type { SurfaceBlockModel } from '@blocksuite/affine-block-surface';
+import type { Color, ShapeElementModel } from '@blocksuite/affine-model';
 import type { Bound } from '@blocksuite/global/utils';
 
+import {
+  CanvasRenderer,
+  elementRenderers,
+  fitContent,
+} from '@blocksuite/affine-block-surface';
+import { ThemeObserver } from '@blocksuite/affine-shared/theme';
 import { BlockComponent } from '@blocksuite/block-std';
+import { GfxControllerIdentifier } from '@blocksuite/block-std/gfx';
 import { html } from 'lit';
-import { customElement, query } from 'lit/decorators.js';
+import { query } from 'lit/decorators.js';
 
-import type { Color } from '../consts.js';
-import type { ShapeElementModel } from '../element-model/shape.js';
-import type { SurfaceBlockModel } from '../surface-model.js';
-import type { MindmapService } from './service.js';
+import type { MindmapService } from './minmap-service.js';
 
-import { ThemeObserver } from '../../_common/theme/theme-observer.js';
-import { Viewport } from '../../root-block/edgeless/utils/viewport.js';
-import { fitContent } from '../canvas-renderer/element-renderer/shape/utils.js';
-import { Renderer } from '../canvas-renderer/renderer.js';
-import { LayerManager } from '../managers/layer-manager.js';
-
-@customElement('mini-mindmap-surface-block')
 export class MindmapSurfaceBlock extends BlockComponent<SurfaceBlockModel> {
-  private _layer?: LayerManager;
+  renderer?: CanvasRenderer;
 
-  private _renderer?: Renderer;
+  private get _grid() {
+    return this.std.get(GfxControllerIdentifier).grid;
+  }
 
-  private _viewport: Viewport;
+  private get _layer() {
+    return this.std.get(GfxControllerIdentifier).layer;
+  }
+
+  get mindmapService() {
+    return this.std.getService('affine:page') as unknown as MindmapService;
+  }
+
+  get viewport() {
+    return this.std.get(GfxControllerIdentifier).viewport;
+  }
 
   constructor() {
     super();
-    this._viewport = new Viewport();
   }
 
   private _adjustNodeWidth() {
@@ -40,7 +50,7 @@ export class MindmapSurfaceBlock extends BlockComponent<SurfaceBlockModel> {
 
   private _resizeEffect() {
     const observer = new ResizeObserver(() => {
-      this._viewport.onResize();
+      this.viewport.onResize();
     });
 
     observer.observe(this.editorContainer);
@@ -63,7 +73,7 @@ export class MindmapSurfaceBlock extends BlockComponent<SurfaceBlockModel> {
         });
 
         if (bound!) {
-          this._viewport.setViewportByBound(bound, [10, 10, 10, 10]);
+          this.viewport.setViewportByBound(bound, [10, 10, 10, 10]);
         }
       })
     );
@@ -72,22 +82,21 @@ export class MindmapSurfaceBlock extends BlockComponent<SurfaceBlockModel> {
   private _setupRenderer() {
     this._disposables.add(
       this.model.elementUpdated.on(() => {
-        this._renderer?.refresh();
+        this.renderer?.refresh();
         this.mindmapService.center();
       })
     );
 
-    this._viewport.ZOOM_MIN = 0.01;
+    this.viewport.ZOOM_MIN = 0.01;
   }
 
   override connectedCallback(): void {
     super.connectedCallback();
 
-    this._layer = LayerManager.create(this.doc, this.model);
-    this._viewport = new Viewport();
-    this._renderer = new Renderer({
-      viewport: this._viewport,
+    this.renderer = new CanvasRenderer({
+      viewport: this.viewport,
       layerManager: this._layer,
+      gridManager: this._grid,
       enableStackingCanvas: true,
       provider: {
         selectedElements: () => [],
@@ -99,12 +108,12 @@ export class MindmapSurfaceBlock extends BlockComponent<SurfaceBlockModel> {
         getPropertyValue: (property: string) =>
           ThemeObserver.getPropertyValue(property),
       },
+      elementRenderers,
     });
   }
 
   override firstUpdated(_changedProperties: Map<PropertyKey, unknown>): void {
-    this._renderer?.attach(this.editorContainer);
-    this._viewport.setContainer(this.editorContainer);
+    this.renderer?.attach(this.editorContainer);
 
     this._resizeEffect();
     this._setupCenterEffect();
@@ -125,12 +134,6 @@ export class MindmapSurfaceBlock extends BlockComponent<SurfaceBlockModel> {
         <!-- attach cavnas later in renderer -->
       </div>
     `;
-  }
-
-  get mindmapService() {
-    return this.host.spec.getService(
-      'affine:page'
-    ) as unknown as MindmapService;
   }
 
   @query('.affine-mini-mindmap-surface')

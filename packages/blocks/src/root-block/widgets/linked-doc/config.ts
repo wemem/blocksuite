@@ -1,18 +1,26 @@
 import type { EditorHost } from '@blocksuite/block-std';
 import type { TemplateResult } from 'lit';
 
-import type { AffineInlineEditor } from '../../../_common/inline/presets/affine-inline-specs.js';
-
-import { toast } from '../../../_common/components/toast.js';
 import {
   ImportIcon,
   LinkedDocIcon,
   LinkedEdgelessIcon,
   NewDocIcon,
-} from '../../../_common/icons/index.js';
-import { REFERENCE_NODE } from '../../../_common/inline/presets/nodes/consts.js';
-import { createDefaultDoc } from '../../../_common/utils/init.js';
-import { isFuzzyMatch } from '../../../_common/utils/string.js';
+} from '@blocksuite/affine-components/icons';
+import {
+  type AffineInlineEditor,
+  insertLinkedNode,
+} from '@blocksuite/affine-components/rich-text';
+import { toast } from '@blocksuite/affine-components/toast';
+import {
+  DocModeProvider,
+  TelemetryProvider,
+} from '@blocksuite/affine-shared/services';
+import {
+  createDefaultDoc,
+  isFuzzyMatch,
+} from '@blocksuite/affine-shared/utils';
+
 import { showImportModal } from './import-doc/index.js';
 
 export type LinkedMenuItem = {
@@ -37,25 +45,6 @@ export type LinkedMenuGroup = {
 const DEFAULT_DOC_NAME = 'Untitled';
 const DISPLAY_NAME_LENGTH = 8;
 
-export function insertLinkedNode({
-  inlineEditor,
-  docId,
-}: {
-  inlineEditor: AffineInlineEditor;
-  docId: string;
-}) {
-  if (!inlineEditor) return;
-  const inlineRange = inlineEditor.getInlineRange();
-  if (!inlineRange) return;
-  inlineEditor.insertText(inlineRange, REFERENCE_NODE, {
-    reference: { type: 'LinkedPage', pageId: docId },
-  });
-  inlineEditor.setInlineRange({
-    index: inlineRange.index + 1,
-    length: 0,
-  });
-}
-
 export function createLinkedDocMenuGroup(
   query: string,
   abort: () => void,
@@ -63,7 +52,6 @@ export function createLinkedDocMenuGroup(
   inlineEditor: AffineInlineEditor
 ) {
   const doc = editorHost.doc;
-  const { docModeService } = editorHost.std.spec.getService('affine:page');
   const { docMetas } = doc.collection.meta;
   const filteredDocList = docMetas
     .filter(({ id }) => id !== doc.id)
@@ -76,7 +64,8 @@ export function createLinkedDocMenuGroup(
       key: doc.id,
       name: doc.title || DEFAULT_DOC_NAME,
       icon:
-        docModeService.getMode(doc.id) === 'edgeless'
+        editorHost.std.get(DocModeProvider).getPrimaryMode(doc.id) ===
+        'edgeless'
           ? LinkedEdgelessIcon
           : LinkedDocIcon,
       action: () => {
@@ -85,9 +74,9 @@ export function createLinkedDocMenuGroup(
           inlineEditor,
           docId: doc.id,
         });
-        editorHost.spec
-          .getService('affine:page')
-          .telemetryService?.track('LinkedDocCreated', {
+        editorHost.std
+          .getOptional(TelemetryProvider)
+          ?.track('LinkedDocCreated', {
             control: 'linked doc',
             module: 'inline @',
             type: 'doc',
@@ -130,7 +119,7 @@ export function createNewDocMenuGroup(
             docId: newDoc.id,
           });
           const telemetryService =
-            editorHost.spec.getService('affine:page').telemetryService;
+            editorHost.std.getOptional(TelemetryProvider);
           telemetryService?.track('LinkedDocCreated', {
             control: 'new doc',
             module: 'inline @',

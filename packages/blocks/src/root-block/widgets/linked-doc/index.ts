@@ -1,21 +1,18 @@
+import type { AffineInlineEditor } from '@blocksuite/affine-components/rich-text';
 import type { EditorHost, UIEventStateContext } from '@blocksuite/block-std';
 
+import { getInlineEditorByModel } from '@blocksuite/affine-components/rich-text';
+import {
+  getCurrentNativeRange,
+  getViewportElement,
+  matchFlavours,
+} from '@blocksuite/affine-shared/utils';
 import { WidgetComponent } from '@blocksuite/block-std';
 import { DisposableGroup, throttle } from '@blocksuite/global/utils';
 import { InlineEditor } from '@blocksuite/inline';
-import { customElement } from 'lit/decorators.js';
 
-import type { AffineInlineEditor } from '../../../_common/inline/presets/affine-inline-specs.js';
-
-import { isControlledKeyboardEvent } from '../../../_common/utils/event.js';
-import { matchFlavours } from '../../../_common/utils/index.js';
-import {
-  getInlineEditorByModel,
-  getViewportElement,
-} from '../../../_common/utils/query.js';
-import { getCurrentNativeRange } from '../../../_common/utils/selection.js';
 import { getPopperPosition } from '../../../root-block/utils/position.js';
-import { type LinkedMenuGroup, getMenus } from './config.js';
+import { getMenus, type LinkedMenuGroup } from './config.js';
 import { LinkedDocPopover } from './linked-doc-popover.js';
 
 export const AFFINE_LINKED_DOC_WIDGET = 'affine-linked-doc-widget';
@@ -40,68 +37,10 @@ export interface LinkedWidgetConfig {
   ) => Promise<LinkedMenuGroup[]>;
 }
 
-@customElement(AFFINE_LINKED_DOC_WIDGET)
 export class AffineLinkedDocWidget extends WidgetComponent {
-  private _onKeyDown = (ctx: UIEventStateContext) => {
-    const eventState = ctx.get('keyboardState');
-    const event = eventState.raw;
-    // FIXME: Event can be undefined sometimes for unknown reason
-    // Need to investigate
-    // Maybe related to the lifecycle of the widget
-    if (!event || isControlledKeyboardEvent(event) || event.key.length !== 1)
-      return;
-    const inlineEditor = this.getInlineEditor(event);
-    if (!inlineEditor) return;
-    const inlineRange = inlineEditor.getInlineRange();
-    if (!inlineRange) return;
-    if (inlineRange.length > 0) {
-      // When select text and press `[[` should not trigger transform,
-      // since it will break the bracket complete.
-      // Expected `[[selected text]]` instead of `@selected text]]`
-      return;
-    }
+  private _abortController: AbortController | null = null;
 
-    const textPoint = inlineEditor.getTextPoint(inlineRange.index);
-    if (!textPoint) return;
-    const [leafStart, offsetStart] = textPoint;
-    const prefixText = leafStart.textContent
-      ? leafStart.textContent.slice(0, offsetStart)
-      : '';
-
-    const matchedKey = this.config.triggerKeys.find(triggerKey =>
-      (prefixText + event.key).endsWith(triggerKey)
-    );
-    if (!matchedKey) return;
-
-    const primaryTriggerKey = this.config.triggerKeys[0];
-    inlineEditor.slots.inlineRangeApply.once(() => {
-      if (this.config.convertTriggerKey && primaryTriggerKey !== matchedKey) {
-        // Convert to the primary trigger key
-        // e.g. [[ -> @
-        const startIdxBeforeMatchKey =
-          inlineRange.index - (matchedKey.length - 1);
-        inlineEditor.deleteText({
-          index: startIdxBeforeMatchKey,
-          length: matchedKey.length,
-        });
-        inlineEditor.insertText(
-          { index: startIdxBeforeMatchKey, length: 0 },
-          primaryTriggerKey
-        );
-        inlineEditor.setInlineRange({
-          index: startIdxBeforeMatchKey + primaryTriggerKey.length,
-          length: 0,
-        });
-        inlineEditor.slots.inlineRangeApply.once(() => {
-          this.showLinkedDocPopover(inlineEditor, primaryTriggerKey);
-        });
-        return;
-      }
-      this.showLinkedDocPopover(inlineEditor, matchedKey);
-    });
-  };
-
-  private getInlineEditor = (evt: KeyboardEvent) => {
+  private _getInlineEditor = (evt: KeyboardEvent | CompositionEvent) => {
     if (evt.target instanceof HTMLElement) {
       const editor = (
         evt.target.closest('.can-link-doc > .inline-editor') as {
@@ -128,6 +67,50 @@ export class AffineLinkedDocWidget extends WidgetComponent {
     return getInlineEditorByModel(this.host, model);
   };
 
+  private _onCompositionEnd = (ctx: UIEventStateContext) => {
+    const event = ctx.get('defaultState').event as CompositionEvent;
+
+    const key = event.data;
+
+    if (
+      !key ||
+      !this.config.triggerKeys.some(triggerKey => triggerKey.includes(key))
+    )
+      return;
+
+    const inlineEditor = this._getInlineEditor(event);
+    if (!inlineEditor) return;
+
+    this._handleInput(inlineEditor, true);
+  };
+
+  private _onKeyDown = (ctx: UIEventStateContext) => {
+    const eventState = ctx.get('keyboardState');
+    const event = eventState.raw;
+
+    const key = event.key;
+    if (
+      key === undefined || // in mac os, the key may be undefined
+      key === 'Process' ||
+      event.isComposing
+    )
+      return;
+
+    const inlineEditor = this._getInlineEditor(event);
+    if (!inlineEditor) return;
+    const inlineRange = inlineEditor.getInlineRange();
+    if (!inlineRange) return;
+
+    if (inlineRange.length > 0) {
+      // When select text and press `[[` should not trigger transform,
+      // since it will break the bracket complete.
+      // Expected `[[selected text]]` instead of `@selected text]]`
+      return;
+    }
+
+    this._handleInput(inlineEditor, false);
+  };
+
   showLinkedDocPopover = (
     inlineEditor: AffineInlineEditor,
     triggerKey: string
@@ -135,9 +118,10 @@ export class AffineLinkedDocWidget extends WidgetComponent {
     const curRange = getCurrentNativeRange();
     if (!curRange) return;
 
-    const abortController = new AbortController();
+    this._abortController?.abort();
+    this._abortController = new AbortController();
     const disposables = new DisposableGroup();
-    abortController.signal.addEventListener('abort', () =>
+    this._abortController.signal.addEventListener('abort', () =>
       disposables.dispose()
     );
 
@@ -146,7 +130,7 @@ export class AffineLinkedDocWidget extends WidgetComponent {
       this.config.getMenus,
       this.host,
       inlineEditor,
-      abortController
+      this._abortController
     );
 
     // Mount
@@ -174,16 +158,11 @@ export class AffineLinkedDocWidget extends WidgetComponent {
 
     disposables.addFromEvent(window, 'mousedown', (e: Event) => {
       if (e.target === linkedDoc) return;
-      abortController.abort();
+      this._abortController?.abort();
     });
 
     return linkedDoc;
   };
-
-  override connectedCallback() {
-    super.connectedCallback();
-    this.handleEvent('keyDown', this._onKeyDown);
-  }
 
   get config(): LinkedWidgetConfig {
     return {
@@ -191,8 +170,67 @@ export class AffineLinkedDocWidget extends WidgetComponent {
       ignoreBlockTypes: ['affine:code'],
       convertTriggerKey: true,
       getMenus,
-      ...this.std.spec.getConfig('affine:page')?.linkedWidget,
+      ...this.std.getConfig('affine:page')?.linkedWidget,
     };
+  }
+
+  private _handleInput(inlineEditor: InlineEditor, isCompositionEnd: boolean) {
+    const primaryTriggerKey = this.config.triggerKeys[0];
+
+    const inlineRangeApplyCallback = (callback: () => void) => {
+      // the inline ranged updated in compositionEnd event before this event callback
+      if (isCompositionEnd) callback();
+      else inlineEditor.slots.inlineRangeSync.once(callback);
+    };
+
+    inlineRangeApplyCallback(() => {
+      const inlineRange = inlineEditor.getInlineRange();
+      if (!inlineRange) return;
+      const textPoint = inlineEditor.getTextPoint(inlineRange.index);
+      if (!textPoint) return;
+      const [leafStart, offsetStart] = textPoint;
+
+      const text = leafStart.textContent
+        ? leafStart.textContent.slice(0, offsetStart)
+        : '';
+
+      const matchedKey = this.config.triggerKeys.find(triggerKey =>
+        text.endsWith(triggerKey)
+      );
+      if (!matchedKey) return;
+
+      if (this.config.convertTriggerKey && primaryTriggerKey !== matchedKey) {
+        const inlineRange = inlineEditor.getInlineRange();
+        if (!inlineRange) return;
+
+        // Convert to the primary trigger key
+        // e.g. [[ -> @
+        const startIdxBeforeMatchKey = inlineRange.index - matchedKey.length;
+        inlineEditor.deleteText({
+          index: startIdxBeforeMatchKey,
+          length: matchedKey.length,
+        });
+        inlineEditor.insertText(
+          { index: startIdxBeforeMatchKey, length: 0 },
+          primaryTriggerKey
+        );
+        inlineEditor.setInlineRange({
+          index: startIdxBeforeMatchKey + primaryTriggerKey.length,
+          length: 0,
+        });
+        inlineEditor.slots.inlineRangeSync.once(() => {
+          this.showLinkedDocPopover(inlineEditor, primaryTriggerKey);
+        });
+        return;
+      }
+      this.showLinkedDocPopover(inlineEditor, matchedKey);
+    });
+  }
+
+  override connectedCallback() {
+    super.connectedCallback();
+    this.handleEvent('keyDown', this._onKeyDown);
+    this.handleEvent('compositionEnd', this._onCompositionEnd);
   }
 }
 

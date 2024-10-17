@@ -1,4 +1,8 @@
 import {
+  DEFAULT_NOTE_BACKGROUND_COLOR,
+  NoteDisplayMode,
+} from '@blocksuite/affine-model';
+import {
   AssetsManager,
   type BlockSnapshot,
   MemoryBlobCRUD,
@@ -7,7 +11,6 @@ import { describe, expect, test } from 'vitest';
 
 import { NotionHtmlAdapter } from '../../_common/adapters/notion-html.js';
 import { nanoidReplacement } from '../../_common/test-utils/test-utils.js';
-import { NoteDisplayMode } from '../../_common/types.js';
 import { createJob } from '../utils/create-job.js';
 
 describe('notion html to snapshot', () => {
@@ -26,7 +29,7 @@ describe('notion html to snapshot', () => {
       flavour: 'affine:note',
       props: {
         xywh: '[0,0,800,95]',
-        background: '--affine-background-secondary-color',
+        background: DEFAULT_NOTE_BACKGROUND_COLOR,
         index: 'a0',
         hidden: false,
         displayMode: NoteDisplayMode.DocAndEdgeless,
@@ -81,7 +84,7 @@ describe('notion html to snapshot', () => {
       flavour: 'affine:note',
       props: {
         xywh: '[0,0,800,95]',
-        background: '--affine-background-secondary-color',
+        background: DEFAULT_NOTE_BACKGROUND_COLOR,
         index: 'a0',
         hidden: false,
         displayMode: NoteDisplayMode.DocAndEdgeless,
@@ -196,7 +199,7 @@ describe('notion html to snapshot', () => {
       flavour: 'affine:note',
       props: {
         xywh: '[0,0,800,95]',
-        background: '--affine-background-secondary-color',
+        background: DEFAULT_NOTE_BACKGROUND_COLOR,
         index: 'a0',
         hidden: false,
         displayMode: NoteDisplayMode.DocAndEdgeless,
@@ -364,7 +367,7 @@ describe('notion html to snapshot', () => {
       flavour: 'affine:note',
       props: {
         xywh: '[0,0,800,95]',
-        background: '--affine-background-secondary-color',
+        background: DEFAULT_NOTE_BACKGROUND_COLOR,
         index: 'a0',
         hidden: false,
         displayMode: NoteDisplayMode.DocAndEdgeless,
@@ -800,7 +803,7 @@ describe('notion html to snapshot', () => {
       flavour: 'affine:note',
       props: {
         xywh: '[0,0,800,95]',
-        background: '--affine-background-secondary-color',
+        background: DEFAULT_NOTE_BACKGROUND_COLOR,
         index: 'a0',
         hidden: false,
         displayMode: NoteDisplayMode.DocAndEdgeless,
@@ -900,7 +903,7 @@ describe('notion html to snapshot', () => {
       flavour: 'affine:note',
       props: {
         xywh: '[0,0,800,95]',
-        background: '--affine-background-secondary-color',
+        background: DEFAULT_NOTE_BACKGROUND_COLOR,
         index: 'a0',
         hidden: false,
         displayMode: NoteDisplayMode.DocAndEdgeless,
@@ -946,7 +949,7 @@ describe('notion html to snapshot', () => {
       flavour: 'affine:note',
       props: {
         xywh: '[0,0,800,95]',
-        background: '--affine-background-secondary-color',
+        background: DEFAULT_NOTE_BACKGROUND_COLOR,
         index: 'a0',
         hidden: false,
         displayMode: NoteDisplayMode.DocAndEdgeless,
@@ -1015,7 +1018,7 @@ describe('notion html to snapshot', () => {
       flavour: 'affine:note',
       props: {
         xywh: '[0,0,800,95]',
-        background: '--affine-background-secondary-color',
+        background: DEFAULT_NOTE_BACKGROUND_COLOR,
         index: 'a0',
         hidden: false,
         displayMode: NoteDisplayMode.DocAndEdgeless,
@@ -1064,7 +1067,7 @@ describe('notion html to snapshot', () => {
       flavour: 'affine:note',
       props: {
         xywh: '[0,0,800,95]',
-        background: '--affine-background-secondary-color',
+        background: DEFAULT_NOTE_BACKGROUND_COLOR,
         index: 'a0',
         hidden: false,
         displayMode: NoteDisplayMode.DocAndEdgeless,
@@ -1111,7 +1114,7 @@ describe('notion html to snapshot', () => {
       flavour: 'affine:note',
       props: {
         xywh: '[0,0,800,95]',
-        background: '--affine-background-secondary-color',
+        background: DEFAULT_NOTE_BACKGROUND_COLOR,
         index: 'a0',
         hidden: false,
         displayMode: NoteDisplayMode.DocAndEdgeless,
@@ -1155,7 +1158,7 @@ describe('notion html to snapshot', () => {
       flavour: 'affine:note',
       props: {
         xywh: '[0,0,800,95]',
-        background: '--affine-background-secondary-color',
+        background: DEFAULT_NOTE_BACKGROUND_COLOR,
         index: 'a0',
         hidden: false,
         displayMode: NoteDisplayMode.DocAndEdgeless,
@@ -1180,6 +1183,9 @@ describe('notion html to snapshot', () => {
     const blobCRUD = new MemoryBlobCRUD();
     const key = await blobCRUD.set(new File([], 'README.pdf'));
     const assestsManager = new AssetsManager({ blob: blobCRUD });
+    assestsManager
+      .getPathBlobIdMap()
+      .set('Untitled 3d2ae962f5433a90499ddbd1c81ac507/README.pdf', key);
     await assestsManager.readFromBlob(key);
     const rawBlockSnapshot = await adapter.toBlockSnapshot({
       file: html,
@@ -1272,7 +1278,7 @@ describe('notion html to snapshot', () => {
       flavour: 'affine:note',
       props: {
         xywh: '[0,0,800,95]',
-        background: '--affine-background-secondary-color',
+        background: DEFAULT_NOTE_BACKGROUND_COLOR,
         index: 'a0',
         hidden: false,
         displayMode: NoteDisplayMode.DocAndEdgeless,
@@ -1547,7 +1553,7 @@ describe('notion html to snapshot', () => {
       flavour: 'affine:note',
       props: {
         xywh: '[0,0,800,95]',
-        background: '--affine-background-secondary-color',
+        background: DEFAULT_NOTE_BACKGROUND_COLOR,
         index: 'a0',
         hidden: false,
         displayMode: 'both',

@@ -1,20 +1,19 @@
-import type { EditorHost } from '@blocksuite/block-std';
+import type { DatabaseBlockModel } from '@blocksuite/affine-model';
+import type { DetailSlotProps, SingleView } from '@blocksuite/data-view';
 
-import { ShadowlessElement, WithDisposable } from '@blocksuite/block-std';
-import { css, html } from 'lit';
-import { customElement, property, query } from 'lit/decorators.js';
-
-import type { DetailSlotProps } from '../data-view/common/data-source/base.js';
-import type { SingleView } from '../data-view/view-manager/single-view.js';
-import type { DatabaseBlockModel } from '../database-model.js';
-
+import { focusTextModel } from '@blocksuite/affine-components/rich-text';
 import {
-  asyncFocusRichText,
   createDefaultDoc,
   matchFlavours,
-} from '../../_common/utils/index.js';
-
-@customElement('database-datasource-note-renderer')
+} from '@blocksuite/affine-shared/utils';
+import {
+  BlockStdScope,
+  type EditorHost,
+  ShadowlessElement,
+} from '@blocksuite/block-std';
+import { WithDisposable } from '@blocksuite/global/utils';
+import { css, html } from 'lit';
+import { property, query } from 'lit/decorators.js';
 export class NoteRenderer
   extends WithDisposable(ShadowlessElement)
   implements DetailSlotProps
@@ -26,6 +25,10 @@ export class NoteRenderer
       flex: 1;
     }
   `;
+
+  get databaseBlock(): DatabaseBlockModel {
+    return this.model;
+  }
 
   addNote() {
     const collection = this.host?.std.collection;
@@ -50,7 +53,7 @@ export class NoteRenderer
             ])
           );
         if (this.subHost && block) {
-          asyncFocusRichText(this.subHost, block.id)?.catch(console.error);
+          focusTextModel(this.subHost.std, block.id);
         }
       });
     }
@@ -100,11 +103,11 @@ export class NoteRenderer
     if (!page) {
       return;
     }
-    return html`${host.renderSpecPortal(page, host.specs)} `;
-  }
-
-  get databaseBlock(): DatabaseBlockModel {
-    return this.model;
+    const previewStd = new BlockStdScope({
+      doc: page,
+      extensions: std.userExtensions,
+    });
+    return html`${previewStd.render()} `;
   }
 
   @property({ attribute: false })

@@ -1,55 +1,23 @@
-import { WithDisposable } from '@blocksuite/block-std';
-import { Bound } from '@blocksuite/global/utils';
-import { LitElement, type TemplateResult, css, html, nothing } from 'lit';
-import { customElement, property, state } from 'lit/decorators.js';
-import { join } from 'lit/directives/join.js';
-import { repeat } from 'lit/directives/repeat.js';
-
-import type { Action } from '../../../_common/components/toolbar/utils.js';
-import type { EmbedCardStyle } from '../../../_common/types.js';
 import type {
-  BookmarkBlockComponent,
   BookmarkBlockModel,
-} from '../../../bookmark-block/index.js';
-import type {
-  EmbedFigmaBlockComponent,
   EmbedFigmaModel,
-} from '../../../embed-figma-block/index.js';
-import type {
-  EmbedGithubBlockComponent,
   EmbedGithubModel,
-} from '../../../embed-github-block/index.js';
-import type { EmbedHtmlModel } from '../../../embed-html-block/index.js';
-import type {
-  EmbedLinkedDocBlockComponent,
+  EmbedHtmlModel,
   EmbedLinkedDocModel,
-} from '../../../embed-linked-doc-block/index.js';
-import type {
-  EmbedLoomBlockComponent,
   EmbedLoomModel,
-} from '../../../embed-loom-block/index.js';
-import type {
-  EmbedSyncedDocBlockComponent,
   EmbedSyncedDocModel,
-} from '../../../embed-synced-doc-block/index.js';
-import type {
-  EmbedYoutubeBlockComponent,
   EmbedYoutubeModel,
-} from '../../../embed-youtube-block/index.js';
-import type { EdgelessRootBlockComponent } from '../../edgeless/edgeless-root-block.js';
-import type { EmbedOptions } from '../../root-service.js';
+} from '@blocksuite/affine-model';
 
-import { toggleEmbedCardEditModal } from '../../../_common/components/embed-card/modal/embed-card-edit-modal.js';
-import { isPeekable, peek } from '../../../_common/components/index.js';
-import { toast } from '../../../_common/components/toast.js';
-import '../../../_common/components/toolbar/icon-button.js';
-import '../../../_common/components/toolbar/menu-button.js';
-import '../../../_common/components/toolbar/separator.js';
-import { renderToolbarSeparator } from '../../../_common/components/toolbar/separator.js';
 import {
-  EMBED_CARD_HEIGHT,
-  EMBED_CARD_WIDTH,
-} from '../../../_common/consts.js';
+  type EmbedFigmaBlockComponent,
+  type EmbedGithubBlockComponent,
+  type EmbedLinkedDocBlockComponent,
+  type EmbedLoomBlockComponent,
+  type EmbedSyncedDocBlockComponent,
+  type EmbedYoutubeBlockComponent,
+  isLinkToNode,
+} from '@blocksuite/affine-block-embed';
 import {
   CaptionIcon,
   CenterPeekIcon,
@@ -59,10 +27,36 @@ import {
   OpenIcon,
   PaletteIcon,
   SmallArrowDownIcon,
-} from '../../../_common/icons/index.js';
-import { getEmbedCardIcons, getHostName } from '../../../_common/utils/url.js';
-import { BookmarkStyles } from '../../../bookmark-block/bookmark-model.js';
-import '../../edgeless/components/panel/card-style-panel.js';
+} from '@blocksuite/affine-components/icons';
+import { isPeekable, peek } from '@blocksuite/affine-components/peek';
+import { toast } from '@blocksuite/affine-components/toast';
+import {
+  type MenuItem,
+  renderToolbarSeparator,
+} from '@blocksuite/affine-components/toolbar';
+import { BookmarkStyles } from '@blocksuite/affine-model';
+import {
+  EmbedOptionProvider,
+  type EmbedOptions,
+} from '@blocksuite/affine-shared/services';
+import { getHostName } from '@blocksuite/affine-shared/utils';
+import { Bound, WithDisposable } from '@blocksuite/global/utils';
+import { css, html, LitElement, nothing, type TemplateResult } from 'lit';
+import { property, state } from 'lit/decorators.js';
+import { ifDefined } from 'lit/directives/if-defined.js';
+import { join } from 'lit/directives/join.js';
+import { repeat } from 'lit/directives/repeat.js';
+
+import type { EmbedCardStyle } from '../../../_common/types.js';
+import type { BookmarkBlockComponent } from '../../../bookmark-block/index.js';
+import type { EdgelessRootBlockComponent } from '../../edgeless/edgeless-root-block.js';
+
+import { toggleEmbedCardEditModal } from '../../../_common/components/embed-card/modal/embed-card-edit-modal.js';
+import {
+  EMBED_CARD_HEIGHT,
+  EMBED_CARD_WIDTH,
+} from '../../../_common/consts.js';
+import { getEmbedCardIcons } from '../../../_common/utils/url.js';
 import {
   isBookmarkBlock,
   isEmbedGithubBlock,
@@ -71,8 +65,41 @@ import {
   isEmbedSyncedDocBlock,
 } from '../../edgeless/utils/query.js';
 
-@customElement('edgeless-change-embed-card-button')
 export class EdgelessChangeEmbedCardButton extends WithDisposable(LitElement) {
+  static override styles = css`
+    .affine-link-preview {
+      display: flex;
+      justify-content: flex-start;
+      width: 140px;
+      padding: var(--1, 0px);
+      border-radius: var(--1, 0px);
+      opacity: var(--add, 1);
+      user-select: none;
+      cursor: pointer;
+
+      color: var(--affine-link-color);
+      font-feature-settings:
+        'clig' off,
+        'liga' off;
+      font-family: var(--affine-font-family);
+      font-size: var(--affine-font-sm);
+      font-style: normal;
+      font-weight: 400;
+      text-decoration: none;
+      text-wrap: nowrap;
+    }
+
+    .affine-link-preview > span {
+      display: inline-block;
+      -webkit-line-clamp: 1;
+      -webkit-box-orient: vertical;
+
+      text-overflow: ellipsis;
+      overflow: hidden;
+      opacity: var(--add, 1);
+    }
+  `;
+
   private _convertToCardView = () => {
     if (this._isCardView) {
       return;
@@ -204,40 +231,6 @@ export class EdgelessChangeEmbedCardButton extends WithDisposable(LitElement) {
     peek(this._blockComponent);
   };
 
-  static override styles = css`
-    .affine-link-preview {
-      display: flex;
-      justify-content: flex-start;
-      width: 140px;
-      padding: var(--1, 0px);
-      border-radius: var(--1, 0px);
-      opacity: var(--add, 1);
-      user-select: none;
-      cursor: pointer;
-
-      color: var(--affine-link-color);
-      font-feature-settings:
-        'clig' off,
-        'liga' off;
-      font-family: var(--affine-font-family);
-      font-size: var(--affine-font-sm);
-      font-style: normal;
-      font-weight: 400;
-      text-decoration: none;
-      text-wrap: nowrap;
-    }
-
-    .affine-link-preview > span {
-      display: inline-block;
-      -webkit-line-clamp: 1;
-      -webkit-box-orient: vertical;
-
-      text-overflow: ellipsis;
-      overflow: hidden;
-      opacity: var(--add, 1);
-    }
-  `;
-
   private get _blockComponent() {
     const blockSelection =
       this.edgeless.service.selection.surfaceSelections.filter(sel =>
@@ -312,7 +305,8 @@ export class EdgelessChangeEmbedCardButton extends WithDisposable(LitElement) {
     }
     return (
       isEmbedLinkedDocBlock(this.model) &&
-      (!!this._blockComponent?.closest('affine-embed-synced-doc-block') ||
+      (isLinkToNode(this.model) ||
+        !!this._blockComponent?.closest('affine-embed-synced-doc-block') ||
         this.model.pageId === this._doc.id)
     );
   }
@@ -373,24 +367,43 @@ export class EdgelessChangeEmbedCardButton extends WithDisposable(LitElement) {
     );
   }
 
+  private get _viewType(): 'inline' | 'embed' | 'card' {
+    if (this._isCardView) {
+      return 'card';
+    }
+
+    if (this._isEmbedView) {
+      return 'embed';
+    }
+
+    // unreachable
+    return 'inline';
+  }
+
+  private get std() {
+    return this.edgeless.std;
+  }
+
   private _openMenuButton() {
-    const buttons: Action[] = [];
+    const buttons: MenuItem[] = [];
 
     if (
       isEmbedLinkedDocBlock(this.model) ||
       isEmbedSyncedDocBlock(this.model)
     ) {
       buttons.push({
-        name: 'Open this doc',
+        type: 'open-this-doc',
+        label: 'Open this doc',
         icon: ExpandFullSmallIcon,
-        handler: this._open,
+        action: this._open,
         disabled: this._openButtonDisabled,
       });
     } else if (this._canShowFullScreenButton) {
       buttons.push({
-        name: 'Open this doc',
+        type: 'open-this-doc',
+        label: 'Open this doc',
         icon: ExpandFullSmallIcon,
-        handler: this._open,
+        action: this._open,
       });
     }
 
@@ -398,9 +411,10 @@ export class EdgelessChangeEmbedCardButton extends WithDisposable(LitElement) {
 
     if (this._blockComponent && isPeekable(this._blockComponent)) {
       buttons.push({
-        name: 'Open in center peek',
+        type: 'open-in-center-peek',
+        label: 'Open in center peek',
         icon: CenterPeekIcon,
-        handler: () => this._peek(),
+        action: () => this._peek(),
       });
     }
 
@@ -426,24 +440,20 @@ export class EdgelessChangeEmbedCardButton extends WithDisposable(LitElement) {
         <div data-size="small" data-orientation="vertical">
           ${repeat(
             buttons,
-            button => button.name,
-            ({ name, icon, handler, disabled }) => html`
+            button => button.label,
+            ({ label, icon, action, disabled }) => html`
               <editor-menu-action
-                aria-label=${name}
+                aria-label=${ifDefined(label)}
                 ?disabled=${disabled}
-                @click=${handler}
+                @click=${action}
               >
-                ${icon}<span class="label">${name}</span>
+                ${icon}<span class="label">${label}</span>
               </editor-menu-action>
             `
           )}
         </div>
       </editor-menu-button>
     `;
-  }
-
-  private get _rootService() {
-    return this.std.spec.getService('affine:page');
   }
 
   private _setCardStyle(style: EmbedCardStyle) {
@@ -483,15 +493,15 @@ export class EdgelessChangeEmbedCardButton extends WithDisposable(LitElement) {
       const buttons = [
         {
           type: 'card',
-          name: 'Card view',
+          label: 'Card view',
           handler: () => this._convertToCardView(),
           disabled: this.model.doc.readonly,
         },
         {
           type: 'embed',
-          name: 'Embed view',
+          label: 'Embed view',
           handler: () => this._convertToEmbedView(),
-          disabled: this.model.doc.readonly && this._embedViewButtonDisabled,
+          disabled: this.model.doc.readonly || this._embedViewButtonDisabled,
         },
       ];
 
@@ -519,15 +529,15 @@ export class EdgelessChangeEmbedCardButton extends WithDisposable(LitElement) {
             ${repeat(
               buttons,
               button => button.type,
-              ({ type, name, handler, disabled }) => html`
+              ({ type, label, handler, disabled }) => html`
                 <editor-menu-action
-                  aria-label=${name}
                   data-testid=${`link-to-${type}`}
+                  aria-label=${ifDefined(label)}
                   ?data-selected=${this._viewType === type}
                   ?disabled=${disabled}
                   @click=${handler}
                 >
-                  ${name}
+                  ${label}
                 </editor-menu-action>
               `
             )}
@@ -539,23 +549,6 @@ export class EdgelessChangeEmbedCardButton extends WithDisposable(LitElement) {
     return nothing;
   }
 
-  private get _viewType(): 'inline' | 'embed' | 'card' {
-    if (this._isCardView) {
-      return 'card';
-    }
-
-    if (this._isEmbedView) {
-      return 'embed';
-    }
-
-    // unreachable
-    return 'inline';
-  }
-
-  private get std() {
-    return this.edgeless.std;
-  }
-
   override connectedCallback() {
     super.connectedCallback();
     this._embedScale = this._getScale();
@@ -564,9 +557,9 @@ export class EdgelessChangeEmbedCardButton extends WithDisposable(LitElement) {
   override render() {
     const model = this.model;
     if ('url' in this.model) {
-      this._embedOptions = this._rootService.getEmbedBlockOptions(
-        this.model.url
-      );
+      this._embedOptions = this.std
+        .get(EmbedOptionProvider)
+        .getEmbedBlockOptions(this.model.url);
     }
 
     const buttons = [

@@ -1,33 +1,33 @@
-import type { TextSelection } from '@blocksuite/block-std';
-
 import { BlockSuiteError, ErrorCode } from '@blocksuite/global/exceptions';
 import { INLINE_ROOT_ATTR, type InlineRootElement } from '@blocksuite/inline';
 
+import type { TextSelection } from '../selection/index.js';
 import type { BlockComponent } from '../view/element/block-component.js';
-import type { EditorHost } from '../view/element/lit-host.js';
 
+import { LifeCycleWatcher } from '../extension/index.js';
+import { BLOCK_ID_ATTR } from '../view/index.js';
+import { RANGE_QUERY_EXCLUDE_ATTR, RANGE_SYNC_EXCLUDE_ATTR } from './consts.js';
 import { RangeBinding } from './range-binding.js';
 
 /**
  * CRUD for Range and TextSelection
  */
-export class RangeManager {
-  /**
-   * Used to exclude certain elements when using `getSelectedBlockComponentsByRange`.
-   */
-  static rangeQueryExcludeAttr = 'data-range-query-exclude';
-
-  /**
-   * Used to mark certain elements so that they are excluded when synchronizing the native range and text selection (such as database block).
-   */
-  static rangeSyncExcludeAttr = 'data-range-sync-exclude';
+export class RangeManager extends LifeCycleWatcher {
+  static override readonly key = 'rangeManager';
 
   binding: RangeBinding | null = null;
 
-  constructor(public host: EditorHost) {}
+  get value() {
+    const selection = document.getSelection();
+    if (!selection) {
+      return;
+    }
+    if (selection.rangeCount === 0) return null;
+    return selection.getRangeAt(0);
+  }
 
   private _isRangeSyncExcluded(el: Element) {
-    return !!el.closest(`[${RangeManager.rangeSyncExcludeAttr}="true"]`);
+    return !!el.closest(`[${RANGE_SYNC_EXCLUDE_ATTR}="true"]`);
   }
 
   clear() {
@@ -35,7 +35,7 @@ export class RangeManager {
     if (!selection) return;
     selection.removeAllRanges();
 
-    const topContenteditableElement = this.host.querySelector(
+    const topContenteditableElement = this.std.host.querySelector(
       '[contenteditable="true"]'
     );
     if (topContenteditableElement instanceof HTMLElement) {
@@ -49,7 +49,7 @@ export class RangeManager {
   getClosestBlock(node: Node) {
     const el = node instanceof Element ? node : node.parentElement;
     if (!el) return null;
-    const block = el.closest<BlockComponent>(`[${this.host.blockIdAttr}]`);
+    const block = el.closest<BlockComponent>(`[${BLOCK_ID_ATTR}]`);
     if (!block) return null;
     if (this._isRangeSyncExcluded(block)) return null;
     return block;
@@ -90,8 +90,8 @@ export class RangeManager {
     const { mode = 'all', match = () => true } = options;
 
     let result = Array.from<BlockComponent>(
-      this.host.querySelectorAll(
-        `[${this.host.blockIdAttr}]:not([${RangeManager.rangeQueryExcludeAttr}="true"])`
+      this.std.host.querySelectorAll(
+        `[${BLOCK_ID_ATTR}]:not([${RANGE_QUERY_EXCLUDE_ATTR}="true"])`
       )
     ).filter(el => range.intersectsNode(el) && match(el));
 
@@ -132,12 +132,12 @@ export class RangeManager {
     return result;
   }
 
-  mount() {
+  override mounted() {
     this.binding = new RangeBinding(this);
   }
 
   queryInlineEditorByPath(path: string) {
-    const block = this.host.view.getBlock(path);
+    const block = this.std.host.view.getBlock(path);
     if (!block) return null;
 
     const inlineRoot = block.querySelector<InlineRootElement>(
@@ -171,7 +171,7 @@ export class RangeManager {
       return null;
     }
 
-    return this.host.selection.create('text', {
+    return this.std.host.selection.create('text', {
       from: {
         blockId: startBlock.blockId,
         index: startInlineRange.index,
@@ -197,7 +197,7 @@ export class RangeManager {
   }
 
   syncRangeToTextSelection(range: Range, isRangeReversed: boolean) {
-    const selectionManager = this.host.selection;
+    const selectionManager = this.std.host.selection;
 
     if (!range) {
       selectionManager.clear(['text']);
@@ -258,14 +258,5 @@ export class RangeManager {
     range.setEnd(endContainer, endOffset);
 
     return range;
-  }
-
-  get value() {
-    const selection = document.getSelection();
-    if (!selection) {
-      return;
-    }
-    if (selection.rangeCount === 0) return null;
-    return selection.getRangeAt(0);
   }
 }

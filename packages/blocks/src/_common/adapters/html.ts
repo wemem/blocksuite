@@ -1,60 +1,50 @@
+import type { AffineTextAttributes } from '@blocksuite/affine-components/rich-text';
 import type { DeltaInsert } from '@blocksuite/inline';
-import type {
-  FromBlockSnapshotPayload,
-  FromBlockSnapshotResult,
-  FromDocSnapshotPayload,
-  FromDocSnapshotResult,
-  FromSliceSnapshotPayload,
-  FromSliceSnapshotResult,
-  ToBlockSnapshotPayload,
-  ToDocSnapshotPayload,
-} from '@blocksuite/store';
-import type {
-  BlockSnapshot,
-  DocSnapshot,
-  SliceSnapshot,
-} from '@blocksuite/store';
-import type { ElementContent, Root, Text } from 'hast';
+import type { Root } from 'hast';
 
+import {
+  ColorScheme,
+  DEFAULT_NOTE_BACKGROUND_COLOR,
+  NoteDisplayMode,
+} from '@blocksuite/affine-model';
+import { ThemeObserver } from '@blocksuite/affine-shared/theme';
+import { getFilenameFromContentDisposition } from '@blocksuite/affine-shared/utils';
 import { sha } from '@blocksuite/global/utils';
 import {
   type AssetsManager,
+  type BlockSnapshot,
   BlockSnapshotSchema,
+  type DocSnapshot,
+  type FromBlockSnapshotPayload,
+  type FromBlockSnapshotResult,
+  type FromDocSnapshotPayload,
+  type FromDocSnapshotResult,
+  type FromSliceSnapshotPayload,
+  type FromSliceSnapshotResult,
   getAssetName,
   nanoid,
+  type SliceSnapshot,
+  type ToBlockSnapshotPayload,
+  type ToDocSnapshotPayload,
 } from '@blocksuite/store';
 import { ASTWalker, BaseAdapter } from '@blocksuite/store';
 import { collapseWhiteSpace } from 'collapse-white-space';
 import rehypeParse from 'rehype-parse';
 import rehypeStringify from 'rehype-stringify';
-import {
-  type BundledLanguage,
-  type ThemedToken,
-  bundledLanguagesInfo,
-} from 'shiki';
+import { bundledLanguagesInfo, codeToHast } from 'shiki';
 import { unified } from 'unified';
 
-import type { AffineTextAttributes } from '../inline/presets/affine-inline-specs.js';
-
-import { isPlaintext } from '../../code-block/utils/code-languages.js';
-import { DARK_THEME, LIGHT_THEME } from '../../code-block/utils/consts.js';
-import { getHighLighter } from '../../code-block/utils/high-lighter.js';
 import {
-  highlightCache,
-  type highlightCacheKey,
-} from '../../code-block/utils/highlight-cache.js';
-import { NoteDisplayMode } from '../types.js';
-import { getFilenameFromContentDisposition } from '../utils/header-value-parser.js';
-import {
-  type HtmlAST,
   hastFlatNodes,
   hastGetElementChildren,
   hastGetTextChildren,
   hastGetTextChildrenOnlyAst,
   hastGetTextContent,
+  hastIsParagraphLike,
   hastQuerySelector,
+  type HtmlAST,
 } from './hast.js';
-import { fetchImage, fetchable, mergeDeltas } from './utils.js';
+import { fetchable, fetchImage, mergeDeltas } from './utils.js';
 
 export type Html = string;
 
@@ -143,90 +133,6 @@ export class HtmlAdapter extends BaseAdapter<Html> {
         }
       }
       return hast;
-    });
-  };
-
-  private _deltaToHighlightHasts = async (
-    deltas: DeltaInsert[],
-    rawLang: unknown
-  ) => {
-    deltas = deltas.reduce((acc, cur) => {
-      return mergeDeltas(acc, cur, { force: true });
-    }, [] as DeltaInsert<object>[]);
-    if (!deltas.length) {
-      return [
-        {
-          type: 'element',
-          tagName: 'span',
-          children: [
-            {
-              type: 'text',
-              value: '',
-            },
-          ],
-        },
-      ] as ElementContent[];
-    }
-
-    const delta = deltas[0];
-    if (typeof rawLang == 'string') {
-      rawLang = rawLang.toLowerCase();
-    }
-    if (
-      !rawLang ||
-      typeof rawLang !== 'string' ||
-      isPlaintext(rawLang) ||
-      // The rawLang should not be 'Text' here
-      rawLang === 'Text' ||
-      !bundledLanguagesInfo.map(({ id }) => id).includes(rawLang as string)
-    ) {
-      return [
-        {
-          type: 'text',
-          value: delta.insert,
-        } as Text,
-      ];
-    }
-    const lang = rawLang as BundledLanguage;
-
-    const highlighter = await getHighLighter({
-      langs: [lang],
-      themes: [LIGHT_THEME, DARK_THEME],
-    });
-    const cacheKey: highlightCacheKey = `${delta.insert}-${rawLang}-light`;
-    const cache = highlightCache.get(cacheKey);
-
-    let tokens: Omit<ThemedToken, 'offset'>[];
-    if (cache) {
-      tokens = cache;
-    } else {
-      tokens = highlighter.codeToTokensBase(delta.insert, { lang }).reduce(
-        (acc, cur, index) => {
-          if (index === 0) {
-            return cur;
-          }
-
-          return [...acc, { content: '\n', color: 'inherit' }, ...cur];
-        },
-        [] as Omit<ThemedToken, 'offset'>[]
-      );
-      highlightCache.set(cacheKey, tokens);
-    }
-
-    return tokens.map(token => {
-      return {
-        type: 'element',
-        tagName: 'span',
-        properties: {
-          style: `word-wrap: break-word; color: ${token.color};`,
-        },
-        children: [
-          {
-            type: 'text',
-            value: token.content,
-          },
-        ],
-      } as ElementContent;
     });
   };
 
@@ -396,12 +302,17 @@ export class HtmlAdapter extends BaseAdapter<Html> {
             let blobId = '';
             let blobUrl = '';
             if (!fetchable(imageURL)) {
-              assets.getAssets().forEach((_value, key) => {
-                const attachmentName = getAssetName(assets.getAssets(), key);
-                if (decodeURIComponent(imageURL).includes(attachmentName)) {
+              const imageURLSplit = imageURL.split('/');
+              while (imageURLSplit.length > 0) {
+                const key = assets
+                  .getPathBlobIdMap()
+                  .get(decodeURIComponent(imageURLSplit.join('/')));
+                if (key) {
                   blobId = key;
+                  break;
                 }
-              });
+                imageURLSplit.shift();
+              }
             } else {
               try {
                 const res = await fetchImage(
@@ -536,30 +447,9 @@ export class HtmlAdapter extends BaseAdapter<Html> {
         case 'span':
         case 'footer': {
           if (
-            // Check if it is a paragraph like div
             o.parent?.node.type === 'element' &&
-            o.parent.node.tagName !== 'li' &&
-            (hastGetElementChildren(o.node).every(child =>
-              [
-                'a',
-                'b',
-                'bdi',
-                'bdo',
-                'br',
-                'code',
-                'del',
-                'em',
-                'i',
-                'ins',
-                'mark',
-                'span',
-                'strong',
-                'u',
-              ].includes(child.tagName)
-            ) ||
-              o.node.children
-                .map(child => child.type)
-                .every(type => type === 'text'))
+            !['li', 'p'].includes(o.parent.node.tagName) &&
+            hastIsParagraphLike(o.node)
           ) {
             context
               .openNode(
@@ -703,6 +593,7 @@ export class HtmlAdapter extends BaseAdapter<Html> {
               'children'
             )
             .closeNode();
+          context.skipAllChildren();
           break;
         }
         case 'iframe': {
@@ -894,35 +785,29 @@ export class HtmlAdapter extends BaseAdapter<Html> {
           break;
         }
         case 'affine:code': {
-          if (typeof o.node.props.language == 'string') {
-            o.node.props.language = o.node.props.language.toLowerCase();
-          }
-          context
-            .openNode(
-              {
-                type: 'element',
-                tagName: 'pre',
-                properties: {},
-                children: [],
-              },
-              'children'
-            )
-            .openNode(
-              {
-                type: 'element',
-                tagName: 'code',
-                properties: {
-                  className: [`code-${o.node.props.language}`],
-                },
-                children: await this._deltaToHighlightHasts(
-                  text.delta,
-                  o.node.props.language
-                ),
-              },
-              'children'
-            )
-            .closeNode()
-            .closeNode();
+          const rawLang = o.node.props.language as string | null;
+          const matchedLang = rawLang
+            ? (bundledLanguagesInfo.find(
+                info =>
+                  info.id === rawLang ||
+                  info.name === rawLang ||
+                  info.aliases?.includes(rawLang)
+              )?.id ?? 'text')
+            : 'text';
+
+          // @ts-ignore
+          const text = o.node.props.text.delta as DeltaInsert[];
+          const code = text.map(delta => delta.insert).join('');
+          const hast = await codeToHast(code, {
+            lang: matchedLang,
+            theme:
+              ThemeObserver.mode === ColorScheme.Dark
+                ? 'dark-plus'
+                : 'light-plus',
+          });
+
+          // @ts-ignore
+          context.openNode(hast, 'children').closeNode();
           break;
         }
         case 'affine:paragraph': {
@@ -1295,7 +1180,7 @@ export class HtmlAdapter extends BaseAdapter<Html> {
       flavour: 'affine:note',
       props: {
         xywh: '[0,0,800,95]',
-        background: '--affine-background-secondary-color',
+        background: DEFAULT_NOTE_BACKGROUND_COLOR,
         index: 'a0',
         hidden: false,
         displayMode: NoteDisplayMode.DocAndEdgeless,
@@ -1320,7 +1205,7 @@ export class HtmlAdapter extends BaseAdapter<Html> {
       flavour: 'affine:note',
       props: {
         xywh: '[0,0,800,95]',
-        background: '--affine-background-secondary-color',
+        background: DEFAULT_NOTE_BACKGROUND_COLOR,
         index: 'a0',
         hidden: false,
         displayMode: NoteDisplayMode.DocAndEdgeless,
@@ -1380,7 +1265,7 @@ export class HtmlAdapter extends BaseAdapter<Html> {
       flavour: 'affine:note',
       props: {
         xywh: '[0,0,800,95]',
-        background: '--affine-background-secondary-color',
+        background: DEFAULT_NOTE_BACKGROUND_COLOR,
         index: 'a0',
         hidden: false,
         displayMode: NoteDisplayMode.DocAndEdgeless,

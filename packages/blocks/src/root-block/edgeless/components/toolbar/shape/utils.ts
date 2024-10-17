@@ -1,6 +1,6 @@
-import { type TemplateResult, render } from 'lit';
+import { render, type TemplateResult } from 'lit';
 
-import type { ShapeTool } from '../../../controllers/tools/shape-tool.js';
+import type { ShapeTool } from '../../../tools/shape-tool.js';
 
 type TransformState = {
   /** horizental offset base on center */
@@ -14,7 +14,7 @@ type TransformState = {
 };
 
 export type DraggableShape = {
-  name: ShapeTool['shapeType'];
+  name: ShapeTool['shapeName'];
   svg: TemplateResult;
   style: {
     default?: TransformState;

@@ -1,8 +1,9 @@
+import { IS_IPAD } from '@blocksuite/global/env';
+
 import type { UIEventDispatcher } from '../dispatcher.js';
 
 import { UIEventState, UIEventStateContext } from '../base.js';
-import { MultiPointerEventState } from '../state/index.js';
-import { PointerEventState } from '../state/index.js';
+import { MultiPointerEventState, PointerEventState } from '../state/index.js';
 import { EventScopeSourceType, EventSourceState } from '../state/source.js';
 import { center, isFarEnough } from '../utils.js';
 
@@ -23,11 +24,11 @@ function createContext(
 }
 
 abstract class PointerControllerBase {
-  constructor(protected _dispatcher: UIEventDispatcher) {}
-
   protected get _rect() {
     return this._dispatcher.host.getBoundingClientRect();
   }
+
+  constructor(protected _dispatcher: UIEventDispatcher) {}
 
   abstract listen(): void;
 }
@@ -150,7 +151,6 @@ class ClickController extends PointerControllerBase {
     const context = createContext(event, state);
 
     const run = () => {
-      this._dispatcher.run('pointerUp', context);
       this._dispatcher.run('click', context);
       if (this._pointerDownCount === 2) {
         this._dispatcher.run('doubleClick', context);
@@ -268,9 +268,26 @@ class DragController extends PointerControllerBase {
     this._reset();
   };
 
+  // https://mikepk.com/2020/10/iOS-safari-scribble-bug/
+  private _applyScribblePatch() {
+    if (!IS_IPAD) return;
+
+    const { host, disposables } = this._dispatcher;
+    disposables.addFromEvent(host, 'touchmove', (event: TouchEvent) => {
+      if (
+        this._dragging &&
+        this._startPointerState &&
+        this._startPointerState.raw.pointerType === 'pen'
+      ) {
+        event.preventDefault();
+      }
+    });
+  }
+
   listen() {
     const { host, disposables } = this._dispatcher;
     disposables.addFromEvent(host, 'pointerdown', this._down);
+    this._applyScribblePatch();
   }
 }
 
@@ -403,6 +420,11 @@ abstract class DualDragControllerBase extends PointerControllerBase {
     }
   };
 
+  abstract _handleMove(
+    event: PointerEvent,
+    state: MultiPointerEventState
+  ): void;
+
   override listen(): void {
     const { host, disposables } = this._dispatcher;
     disposables.addFromEvent(host, 'pointerdown', this._down);
@@ -410,11 +432,6 @@ abstract class DualDragControllerBase extends PointerControllerBase {
     disposables.addFromEvent(host, 'pointerup', this._upOrOut);
     disposables.addFromEvent(host, 'pointerout', this._upOrOut);
   }
-
-  abstract _handleMove(
-    event: PointerEvent,
-    state: MultiPointerEventState
-  ): void;
 }
 
 class PinchController extends DualDragControllerBase {

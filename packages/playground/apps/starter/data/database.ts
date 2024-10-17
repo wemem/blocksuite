@@ -1,23 +1,23 @@
 import {
+  databaseBlockColumns,
   type DatabaseBlockModel,
   type ListType,
   type ParagraphType,
-  columnPresets,
-  databaseViewAddView,
-  richTextColumnConfig,
-  viewPresets,
+  type ViewBasicDataType,
 } from '@blocksuite/blocks';
+import { viewPresets } from '@blocksuite/data-view/view-presets';
 import { assertExists } from '@blocksuite/global/utils';
 import { type DocCollection, Text } from '@blocksuite/store';
 
 import type { InitFn } from './utils.js';
 
+import { propertyPresets } from '../../../../affine/data-view/src/property-presets';
+
 export const database: InitFn = (collection: DocCollection, id: string) => {
   const doc = collection.createDoc({ id });
-  doc.awarenessStore.setFlag('enable_expand_database_block', true);
-  doc.awarenessStore.setFlag('enable_database_statistics', true);
   doc.awarenessStore.setFlag('enable_database_number_formatting', true);
   doc.awarenessStore.setFlag('enable_database_attachment_note', true);
+  doc.awarenessStore.setFlag('enable_database_full_width', true);
   doc.awarenessStore.setFlag('enable_block_query', true);
 
   doc.load(() => {
@@ -44,31 +44,39 @@ export const database: InitFn = (collection: DocCollection, id: string) => {
 
       new Promise(resolve => requestAnimationFrame(resolve))
         .then(() => {
-          const service = window.host.std.spec.getService('affine:database');
+          const service = window.host.std.getService('affine:database');
+          if (!service) return;
           service.initDatabaseBlock(
             doc,
             model,
             databaseId,
-            viewPresets.tableViewConfig,
+            viewPresets.tableViewMeta.type,
             true
           );
           const database = doc.getBlockById(databaseId) as DatabaseBlockModel;
           database.title = new Text(title);
-          const richTextId = database.addColumn(
+          const richTextId = service.addColumn(
+            database,
             'end',
-            richTextColumnConfig.model.create(richTextColumnConfig.model.name)
+            databaseBlockColumns.richTextColumnConfig.create(
+              databaseBlockColumns.richTextColumnConfig.config.name
+            )
           );
           Object.values([
-            columnPresets.multiSelectColumnConfig,
-            columnPresets.dateColumnConfig,
-            columnPresets.numberColumnConfig,
-            columnPresets.linkColumnConfig,
-            columnPresets.checkboxColumnConfig,
-            columnPresets.progressColumnConfig,
+            propertyPresets.multiSelectPropertyConfig,
+            propertyPresets.datePropertyConfig,
+            propertyPresets.numberPropertyConfig,
+            databaseBlockColumns.linkColumnConfig,
+            propertyPresets.checkboxPropertyConfig,
+            propertyPresets.progressPropertyConfig,
           ]).forEach(column => {
-            database.addColumn('end', column.model.create(column.model.name));
+            service.addColumn(
+              database,
+              'end',
+              column.create(column.config.name)
+            );
           });
-          database.updateView(database.views[0].id, () => {
+          service.updateView(database, database.views[0].id, () => {
             return {
               groupBy: group
                 ? {
@@ -77,7 +85,7 @@ export const database: InitFn = (collection: DocCollection, id: string) => {
                     name: 'select',
                   }
                 : undefined,
-            };
+            } as Partial<ViewBasicDataType>;
           });
           const paragraphTypes: ParagraphType[] = [
             'text',
@@ -95,7 +103,7 @@ export const database: InitFn = (collection: DocCollection, id: string) => {
               { type: type, text: new Text(`Paragraph type ${type}`) },
               databaseId
             );
-            database.updateCell(id, {
+            service.updateCell(database, id, {
               columnId: richTextId,
               value: new Text(`Paragraph type ${type}`),
             });
@@ -113,7 +121,7 @@ export const database: InitFn = (collection: DocCollection, id: string) => {
               { type: type, text: new Text(`List type ${type}`) },
               databaseId
             );
-            database.updateCell(id, {
+            service.updateCell(database, id, {
               columnId: richTextId,
               value: new Text(`List type ${type}`),
             });
@@ -124,7 +132,10 @@ export const database: InitFn = (collection: DocCollection, id: string) => {
           doc.addBlock('affine:paragraph', {}, noteId);
           doc.addBlock('affine:paragraph', {}, noteId);
           doc.addBlock('affine:paragraph', {}, noteId);
-          databaseViewAddView(database, viewPresets.kanbanViewConfig);
+          service.databaseViewAddView(
+            database,
+            viewPresets.kanbanViewMeta.type
+          );
 
           doc.resetHistory();
         })

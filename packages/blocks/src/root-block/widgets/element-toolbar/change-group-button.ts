@@ -1,27 +1,28 @@
-import { WithDisposable } from '@blocksuite/block-std';
-import { deserializeXYWH, serializeXYWH } from '@blocksuite/global/utils';
-import { LitElement, html, nothing } from 'lit';
-import { customElement, property } from 'lit/decorators.js';
-import { join } from 'lit/directives/join.js';
+import type { GroupElementModel } from '@blocksuite/affine-model';
 
-import type { GroupElementModel } from '../../../surface-block/index.js';
-import type { EdgelessRootBlockComponent } from '../../edgeless/edgeless-root-block.js';
-
-import { toast } from '../../../_common/components/toast.js';
-import '../../../_common/components/toolbar/icon-button.js';
-import '../../../_common/components/toolbar/separator.js';
-import { renderToolbarSeparator } from '../../../_common/components/toolbar/separator.js';
 import {
   NoteIcon,
   RenameIcon,
   UngroupButtonIcon,
-} from '../../../_common/icons/index.js';
-import { NoteDisplayMode } from '../../../_common/types.js';
-import { matchFlavours } from '../../../_common/utils/model.js';
+} from '@blocksuite/affine-components/icons';
+import { toast } from '@blocksuite/affine-components/toast';
+import { renderToolbarSeparator } from '@blocksuite/affine-components/toolbar';
+import { NoteDisplayMode } from '@blocksuite/affine-model';
+import { matchFlavours } from '@blocksuite/affine-shared/utils';
+import {
+  deserializeXYWH,
+  serializeXYWH,
+  WithDisposable,
+} from '@blocksuite/global/utils';
+import { html, LitElement, nothing } from 'lit';
+import { property } from 'lit/decorators.js';
+import { join } from 'lit/directives/join.js';
+
+import type { EdgelessRootBlockComponent } from '../../edgeless/edgeless-root-block.js';
+
 import { DEFAULT_NOTE_HEIGHT } from '../../edgeless/utils/consts.js';
 import { mountGroupTitleEditor } from '../../edgeless/utils/text.js';
 
-@customElement('edgeless-change-group-button')
 export class EdgelessChangeGroupButton extends WithDisposable(LitElement) {
   private _insertIntoPage() {
     if (!this.edgeless.doc.root) return;

@@ -1,9 +1,13 @@
+import type { BlockModel } from '@blocksuite/store';
+
 import { throttle } from '@blocksuite/global/utils';
 
 import type { BaseSelection, TextSelection } from '../selection/index.js';
+import type { BlockComponent } from '../view/element/block-component.js';
+import type { RangeManager } from './range-manager.js';
 
-import { BlockComponent } from '../view/element/block-component.js';
-import { RangeManager } from './range-manager.js';
+import { BLOCK_ID_ATTR } from '../view/index.js';
+import { RANGE_SYNC_EXCLUDE_ATTR } from './consts.js';
 
 /**
  * Two-way binding between native range and text selection
@@ -12,6 +16,20 @@ export class RangeBinding {
   private _compositionStartCallback:
     | ((event: CompositionEvent) => Promise<void>)
     | null = null;
+
+  private _computePath = (modelId: string) => {
+    const block = this.host.std.doc.getBlock(modelId)?.model;
+    if (!block) return [];
+
+    const path: string[] = [];
+    let parent: BlockModel | null = block;
+    while (parent) {
+      path.unshift(parent.id);
+      parent = this.host.doc.getParent(parent);
+    }
+
+    return path;
+  };
 
   private _onBeforeInput = (event: InputEvent) => {
     const selection = this.selectionManager.find('text');
@@ -72,6 +90,7 @@ export class RangeBinding {
   private _onCompositionEnd = (event: CompositionEvent) => {
     if (this._compositionStartCallback) {
       event.preventDefault();
+      event.stopPropagation();
       this._compositionStartCallback(event).catch(console.error);
       this._compositionStartCallback = null;
     }
@@ -92,13 +111,6 @@ export class RangeBinding {
     const blocks = this.rangeManager.getSelectedBlockComponentsByRange(range, {
       mode: 'flat',
     });
-    const highestBlocks = this.rangeManager.getSelectedBlockComponentsByRange(
-      range,
-      {
-        mode: 'highest',
-        match: block => block.model.role === 'content',
-      }
-    );
 
     const start = blocks.at(0);
     const end = blocks.at(-1);
@@ -111,23 +123,21 @@ export class RangeBinding {
     this._compositionStartCallback = async event => {
       this.isComposing = false;
 
-      const parents: BlockComponent[] = [];
-      for (const highestBlock of highestBlocks) {
-        const parentModel = this.host.doc.getParent(highestBlock.blockId);
-        if (!parentModel) continue;
-        const parent = this.host.view.getBlock(parentModel.id);
-        if (!(parent instanceof BlockComponent) || parents.includes(parent))
-          continue;
+      this.host.renderRoot.replaceChildren();
+      // Because we bypassed Lit and disrupted the DOM structure, this will cause an inconsistency in the original state of `ChildPart`.
+      // Therefore, we need to remove the original `ChildPart`.
+      // https://github.com/lit/lit/blob/a2cd76cfdea4ed717362bb1db32710d70550469d/packages/lit-html/src/lit-html.ts#L2248
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      delete (this.host.renderRoot as any)['_$litPart$'];
+      this.host.requestUpdate();
+      await this.host.updateComplete;
 
-        // Restore the DOM structure damaged by the composition
-        parent.dirty = true;
-        await parent.updateComplete;
-        await parent.updateComplete;
-        parents.push(parent);
-      }
+      this.host.doc.captureSync();
 
       this.host.doc.transact(() => {
         endText.delete(0, to.length);
+        startText.delete(from.index, from.length);
+        startText.insert(event.data, from.index);
         startText.join(endText);
 
         blocks
@@ -169,17 +179,14 @@ export class RangeBinding {
       return;
     }
     const range = selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
-    const isRangeReversed =
-      !!selection.anchorNode &&
-      !!selection.focusNode &&
-      (selection.anchorNode === selection.focusNode
-        ? selection.anchorOffset > selection.focusOffset
-        : selection.anchorNode.compareDocumentPosition(selection.focusNode) ===
-          Node.DOCUMENT_POSITION_PRECEDING);
 
     if (!range) {
       this._prevTextSelection = null;
       this.selectionManager.clear(['text']);
+      return;
+    }
+
+    if (!this.host.contains(range.commonAncestorContainer)) {
       return;
     }
 
@@ -204,15 +211,21 @@ export class RangeBinding {
         ? range.commonAncestorContainer
         : range.commonAncestorContainer.parentElement;
     if (!el) return;
-    const block = el.closest<BlockComponent>(`[${this.host.blockIdAttr}]`);
-    if (block?.getAttribute(RangeManager.rangeSyncExcludeAttr) === 'true')
-      return;
+    const block = el.closest<BlockComponent>(`[${BLOCK_ID_ATTR}]`);
+    if (block?.getAttribute(RANGE_SYNC_EXCLUDE_ATTR) === 'true') return;
 
     const inlineEditor = this.rangeManager?.getClosestInlineEditor(
       range.commonAncestorContainer
     );
     if (inlineEditor?.isComposing) return;
 
+    const isRangeReversed =
+      !!selection.anchorNode &&
+      !!selection.focusNode &&
+      (selection.anchorNode === selection.focusNode
+        ? selection.anchorOffset > selection.focusOffset
+        : selection.anchorNode.compareDocumentPosition(selection.focusNode) ===
+          Node.DOCUMENT_POSITION_PRECEDING);
     const textSelection = this.rangeManager?.rangeToTextSelection(
       range,
       isRangeReversed
@@ -227,10 +240,9 @@ export class RangeBinding {
     // If the model is not found, the selection maybe in another editor
     if (!model) return;
 
-    const path = this.host.view.calculatePath(model);
     this._prevTextSelection = {
       selection: textSelection,
-      path,
+      path: this._computePath(model.id),
     };
     this.rangeManager?.syncRangeToTextSelection(range, isRangeReversed);
   };
@@ -244,26 +256,27 @@ export class RangeBinding {
     if (text === this._prevTextSelection) {
       return;
     }
-
     // wait for lit updated
     this.host.updateComplete
       .then(() => {
-        const model = text && this.host.doc.getBlockById(text.blockId);
-        const path = model && this.host.view.calculatePath(model);
+        const id = text?.blockId;
+        const path = id && this._computePath(id);
 
-        const eq =
-          text && this._prevTextSelection && path
-            ? text.equals(this._prevTextSelection.selection) &&
-              path.join('') === this._prevTextSelection.path.join('')
-            : false;
+        if (this.host.event.active) {
+          const eq =
+            text && this._prevTextSelection && path
+              ? text.equals(this._prevTextSelection.selection) &&
+                path.join('') === this._prevTextSelection.path.join('')
+              : false;
 
-        if (eq) return;
+          if (eq) return;
+        }
 
         this._prevTextSelection =
           text && path
             ? {
                 selection: text,
-                path: path,
+                path,
               }
             : null;
         if (text) {
@@ -281,6 +294,18 @@ export class RangeBinding {
   } | null = null;
 
   isComposing = false;
+
+  get host() {
+    return this.manager.std.host;
+  }
+
+  get rangeManager() {
+    return this.host.range;
+  }
+
+  get selectionManager() {
+    return this.host.selection;
+  }
 
   constructor(public manager: RangeManager) {
     this.host.disposables.add(
@@ -302,26 +327,18 @@ export class RangeBinding {
       })
     );
 
-    this.host.disposables.add(
-      this.host.event.add('compositionStart', this._onCompositionStart)
+    this.host.disposables.addFromEvent(
+      this.host,
+      'compositionstart',
+      this._onCompositionStart
     );
-    this.host.disposables.add(
-      this.host.event.add('compositionEnd', ctx => {
-        const event = ctx.get('defaultState').event as CompositionEvent;
-        this._onCompositionEnd(event);
-      })
+    this.host.disposables.addFromEvent(
+      this.host,
+      'compositionend',
+      this._onCompositionEnd,
+      {
+        capture: true,
+      }
     );
-  }
-
-  get host() {
-    return this.manager.host;
-  }
-
-  get rangeManager() {
-    return this.host.range;
-  }
-
-  get selectionManager() {
-    return this.host.selection;
   }
 }

@@ -1,7 +1,7 @@
-import type { DatabaseBlockModel } from '@blocks/database-block/index.js';
+import type { DatabaseBlockModel } from '@blocksuite/affine-model';
 
-import { assertExists } from '@global/utils.js';
-import { type Page, expect } from '@playwright/test';
+import { assertExists } from '@blocksuite/global/utils';
+import { expect, type Page } from '@playwright/test';
 import { switchEditorMode, zoomOutByKeyboard } from 'utils/actions/edgeless.js';
 import { getLinkedDocPopover } from 'utils/actions/linked-doc.js';
 import {
@@ -127,7 +127,9 @@ test.describe('Embed synced doc', () => {
     await page.mouse.up();
 
     // Check the height of the embed synced doc portal, it should be the same as the embed synced doc in note
-    const EmbedSyncedDocBlock = page.locator('affine-embed-synced-doc-block');
+    const EmbedSyncedDocBlock = page.locator(
+      'affine-embed-edgeless-synced-doc-block'
+    );
     const EmbedSyncedDocBlockBox = await EmbedSyncedDocBlock.boundingBox();
     const border = 1;
     assertExists(EmbedSyncedDocBlockBox);
@@ -243,15 +245,18 @@ test.describe('Embed synced doc', () => {
         if (databaseService) {
           databaseService.databaseViewInitEmpty(
             model,
-            databaseService.viewPresets.tableViewConfig
+            databaseService.viewPresets.tableViewMeta.type
           );
+          databaseService.applyColumnUpdate(model);
         }
-        model.applyColumnUpdate();
       });
-      const backLineButton = page.locator('backlink-button');
-      await backLineButton.click();
-      const backLinkPageButton = page.locator('.backlinks .link');
-      await backLinkPageButton.click();
+
+      // go back to previous doc
+      await page.evaluate(() => {
+        const { collection, editor } = window;
+        editor.doc = collection.getDoc('doc:home')!;
+      });
+
       const databaseFirstCell = page.locator(
         '.affine-database-column-header.database-row'
       );

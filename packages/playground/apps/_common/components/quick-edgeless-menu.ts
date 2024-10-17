@@ -1,12 +1,16 @@
-/* eslint-disable @typescript-eslint/no-restricted-imports */
-import type { AffineTextAttributes, DocMode } from '@blocksuite/blocks';
 import type { SerializedXYWH } from '@blocksuite/global/utils';
 import type { DeltaInsert } from '@blocksuite/inline';
 import type { AffineEditorContainer } from '@blocksuite/presets';
 
 import { ShadowlessElement } from '@blocksuite/block-std';
-import { EdgelessRootService } from '@blocksuite/blocks';
-import { type DocCollection, Text, Utils } from '@blocksuite/store';
+import {
+  type AffineTextAttributes,
+  type DocMode,
+  DocModeProvider,
+  ExportManager,
+} from '@blocksuite/blocks';
+import { EdgelessRootService, printToPdf } from '@blocksuite/blocks';
+import { type DocCollection, Text } from '@blocksuite/store';
 import '@shoelace-style/shoelace/dist/components/alert/alert.js';
 import '@shoelace-style/shoelace/dist/components/button/button.js';
 import '@shoelace-style/shoelace/dist/components/button-group/button-group.js';
@@ -28,20 +32,36 @@ import { setBasePath } from '@shoelace-style/shoelace/dist/utilities/base-path.j
 import { css, html, nothing } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 
-import type { CustomChatPanel } from './custom-chat-panel.js';
 import type { DocsPanel } from './docs-panel.js';
 import type { LeftSidePanel } from './left-side-panel.js';
 
 import { notify } from '../../default/utils/notify.js';
 import { generateRoomId } from '../sync/websocket/utils.js';
 
-const basePath = import.meta.env.DEV
-  ? '/node_modules/@shoelace-style/shoelace/dist'
-  : 'https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.11.2/dist/';
+const basePath =
+  'https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.11.2/dist/';
 setBasePath(basePath);
 
 @customElement('quick-edgeless-menu')
 export class QuickEdgelessMenu extends ShadowlessElement {
+  static override styles = css`
+    :root {
+      --sl-font-size-medium: var(--affine-font-xs);
+      --sl-input-font-size-small: var(--affine-font-xs);
+    }
+
+    .dg.ac {
+      z-index: 1001 !important;
+    }
+
+    .top-container {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 16px;
+    }
+  `;
+
   private _darkModeChange = (e: MediaQueryListEvent) => {
     this._setThemeMode(!!e.matches);
   };
@@ -69,23 +89,25 @@ export class QuickEdgelessMenu extends ShadowlessElement {
     location.href = url.href;
   };
 
-  static override styles = css`
-    :root {
-      --sl-font-size-medium: var(--affine-font-xs);
-      --sl-input-font-size-small: var(--affine-font-xs);
-    }
+  get doc() {
+    return this.editor.doc;
+  }
 
-    .dg.ac {
-      z-index: 1001 !important;
-    }
+  get editorMode() {
+    return this.editor.mode;
+  }
 
-    .top-container {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      font-size: 16px;
+  set editorMode(value: DocMode) {
+    this.editor.mode = value;
+  }
+
+  get rootService() {
+    try {
+      return this.editor.std.getService('affine:page');
+    } catch {
+      return null;
     }
-  `;
+  }
 
   private _addNote() {
     const rootModel = this.doc.root;
@@ -117,11 +139,11 @@ export class QuickEdgelessMenu extends ShadowlessElement {
   }
 
   private _exportPdf() {
-    this.rootService?.exportManager.exportPdf().catch(console.error);
+    this.editor.std.get(ExportManager).exportPdf().catch(console.error);
   }
 
   private _exportPng() {
-    this.rootService?.exportManager.exportPng().catch(console.error);
+    this.editor.std.get(ExportManager).exportPng().catch(console.error);
   }
 
   private async _exportSnapshot() {
@@ -218,6 +240,10 @@ export class QuickEdgelessMenu extends ShadowlessElement {
     }, duration);
   }
 
+  private _print() {
+    printToPdf().catch(console.error);
+  }
+
   private _setThemeMode(dark: boolean) {
     const html = document.querySelector('html');
 
@@ -237,20 +263,15 @@ export class QuickEdgelessMenu extends ShadowlessElement {
     }
   }
 
-  private _shareUrl() {
-    const base64 = Utils.encodeCollectionAsYjsUpdateV2(this.collection);
-    const url = new URL(window.location.toString());
-    url.searchParams.set('init', base64);
-    window.history.pushState({}, '', url);
-  }
-
   private _switchEditorMode() {
-    if (!this.rootService) return;
-    this._docMode = this.rootService.docModeService.toggleMode();
-  }
-
-  private _toggleChatPanel() {
-    this.chatPanel.toggleDisplay();
+    if (!this.editor.host) return;
+    const newMode = this._docMode === 'page' ? 'edgeless' : 'page';
+    const docModeService = this.editor.host.std.get(DocModeProvider);
+    if (docModeService) {
+      docModeService.setPrimaryMode(newMode, this.editor.doc.id);
+    }
+    this._docMode = newMode;
+    this.editor.mode = newMode;
   }
 
   private _toggleDarkMode() {
@@ -265,11 +286,11 @@ export class QuickEdgelessMenu extends ShadowlessElement {
     super.connectedCallback();
 
     this._docMode = this.editor.mode;
-    this.rootService?.docModeService.onModeChange(mode => {
-      this._docMode = mode;
-    });
-    this.editor.slots.docUpdated.on(() => {
-      this._docMode = this.editor.mode;
+    this.editor.slots.docUpdated.on(({ newDocId }) => {
+      const newDocMode = this.editor.std
+        .get(DocModeProvider)
+        .getPrimaryMode(newDocId);
+      this._docMode = newDocMode;
     });
 
     document.body.addEventListener('keydown', this._keydown);
@@ -378,6 +399,7 @@ export class QuickEdgelessMenu extends ShadowlessElement {
                   ></sl-icon>
                   <span>Test operations</span>
                   <sl-menu slot="submenu">
+                    <sl-menu-item @click="${this._print}"> Print </sl-menu-item>
                     <sl-menu-item @click=${this._addNote}>
                       Add Note</sl-menu-item
                     >
@@ -399,14 +421,6 @@ export class QuickEdgelessMenu extends ShadowlessElement {
                     <sl-menu-item @click=${this._importSnapshot}>
                       Import Snapshot
                     </sl-menu-item>
-                    <sl-menu-item @click=${this._shareUrl}>
-                      Share URL</sl-menu-item
-                    >
-                    ${this.chatPanel
-                      ? html`<sl-menu-item @click=${this._toggleChatPanel}>
-                          Toggle Chat Panel
-                        </sl-menu-item>`
-                      : nothing}
                   </sl-menu>
                 </sl-menu-item>
                 <sl-menu-item @click=${this._clearSiteData}>
@@ -558,14 +572,6 @@ export class QuickEdgelessMenu extends ShadowlessElement {
     `;
   }
 
-  get doc() {
-    return this.editor.doc;
-  }
-
-  get rootService() {
-    return this.editor.host?.spec.getService('affine:page');
-  }
-
   @state()
   private accessor _canRedo = false;
 
@@ -577,9 +583,6 @@ export class QuickEdgelessMenu extends ShadowlessElement {
 
   @state()
   private accessor _docMode: DocMode = 'page';
-
-  @property({ attribute: false })
-  accessor chatPanel!: CustomChatPanel;
 
   @property({ attribute: false })
   accessor collection!: DocCollection;

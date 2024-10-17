@@ -1,14 +1,14 @@
+import type { AffineInlineEditor } from '@blocksuite/affine-components/rich-text';
 import type { EditorHost } from '@blocksuite/block-std';
 import type { InlineEditor, InlineRange } from '@blocksuite/inline';
 
+import { getInlineEditorByModel } from '@blocksuite/affine-components/rich-text';
+import {
+  getCurrentNativeRange,
+  isControlledKeyboardEvent,
+} from '@blocksuite/affine-shared/utils';
 import { BlockModel } from '@blocksuite/store';
 import { css, unsafeCSS } from 'lit';
-
-import type { AffineInlineEditor } from '../inline/presets/affine-inline-specs.js';
-
-import { isControlledKeyboardEvent } from '../../_common/utils/event.js';
-import { getInlineEditorByModel } from '../../_common/utils/query.js';
-import { getCurrentNativeRange } from '../../_common/utils/selection.js';
 
 export function getQuery(
   inlineEditor: InlineEditor,
@@ -19,18 +19,6 @@ export function getQuery(
     return null;
   }
   if (nativeRange.startContainer !== nativeRange.endContainer) {
-    console.warn(
-      'Failed to parse query! Current range is not collapsed.',
-      nativeRange
-    );
-    return null;
-  }
-  const textNode = nativeRange.startContainer;
-  if (textNode.nodeType !== Node.TEXT_NODE) {
-    console.warn(
-      'Failed to parse query! Current range is not a text node.',
-      nativeRange
-    );
     return null;
   }
   const curRange = inlineEditor.getInlineRange();
@@ -47,8 +35,7 @@ export function getQuery(
 interface ObserverParams {
   target: HTMLElement;
   signal: AbortSignal;
-  inlineEditor: InlineEditor;
-  onInput?: () => void;
+  onInput?: (isComposition: boolean) => void;
   onDelete?: () => void;
   onMove?: (step: 1 | -1) => void;
   onConfirm?: () => void;
@@ -60,7 +47,6 @@ interface ObserverParams {
 export const createKeydownObserver = ({
   target,
   signal,
-  inlineEditor,
   onInput,
   onDelete,
   onMove,
@@ -69,13 +55,9 @@ export const createKeydownObserver = ({
   onPaste,
   interceptor = (_, next) => next(),
 }: ObserverParams) => {
-  // In iOS webkit, using requestAnimationFrame has some timing issues
-  // we need wait inline editor updated before handle the next action
-  const waitForInlineEditorUpdated = (fn: () => void) => {
-    inlineEditor.slots.inlineRangeUpdate.once(fn);
-  };
-
   const keyDownListener = (e: KeyboardEvent) => {
+    if (e.key === 'Process' || e.isComposing) return;
+
     if (e.defaultPrevented) return;
 
     if (isControlledKeyboardEvent(e)) {
@@ -123,10 +105,10 @@ export const createKeydownObserver = ({
 
     if (
       // input abc, 123, etc.
-      (!isControlledKeyboardEvent(e) && e.key.length === 1) ||
-      e.isComposing
+      !isControlledKeyboardEvent(e) &&
+      e.key.length === 1
     ) {
-      waitForInlineEditorUpdated(() => onInput?.());
+      onInput?.(false);
       return;
     }
 
@@ -136,7 +118,7 @@ export const createKeydownObserver = ({
         return;
       }
       case 'Backspace': {
-        waitForInlineEditorUpdated(() => onDelete?.());
+        onDelete?.();
         return;
       }
       case 'Enter': {
@@ -197,18 +179,10 @@ export const createKeydownObserver = ({
   );
 
   // Fix paste input
-  target.addEventListener(
-    'paste',
-    () => waitForInlineEditorUpdated(() => onInput?.()),
-    { signal }
-  );
+  target.addEventListener('paste', () => onDelete?.(), { signal });
 
   // Fix composition input
-  target.addEventListener(
-    'input',
-    () => waitForInlineEditorUpdated(() => onInput?.()),
-    { signal }
-  );
+  target.addEventListener('compositionend', () => onInput?.(true), { signal });
 };
 
 /**

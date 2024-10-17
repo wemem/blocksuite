@@ -1,26 +1,24 @@
-import { LitElement, css, html } from 'lit';
-import { customElement, state } from 'lit/decorators.js';
-
-import type { NoteTool } from '../../../controllers/tools/note-tool.js';
-
-import { DEFAULT_NOTE_BACKGROUND_COLOR } from '../../../../../_common/edgeless/note/consts.js';
 import {
   Heading1Icon,
   LinkIcon,
   TextIcon,
-} from '../../../../../_common/icons/text.js';
-import { ThemeObserver } from '../../../../../_common/theme/theme-observer.js';
+} from '@blocksuite/affine-components/icons';
+import { EditPropsStore } from '@blocksuite/affine-shared/services';
+import { ThemeObserver } from '@blocksuite/affine-shared/theme';
+import { SignalWatcher } from '@blocksuite/global/utils';
+import { computed } from '@preact/signals-core';
+import { css, html, LitElement } from 'lit';
+import { state } from 'lit/decorators.js';
+
+import type { NoteTool } from '../../../tools/note-tool.js';
+
 import { getTooltipWithShortcut } from '../../utils.js';
 import { EdgelessToolbarToolMixin } from '../mixins/tool.mixin.js';
 import { toShapeNotToAdapt } from './icon.js';
-import './note-menu.js';
 
-@customElement('edgeless-note-senior-button')
 export class EdgelessNoteSeniorButton extends EdgelessToolbarToolMixin(
-  LitElement
+  SignalWatcher(LitElement)
 ) {
-  private _states = ['childFlavour', 'childType', 'tip'] as const;
-
   static override styles = css`
     :host,
     .edgeless-note-button {
@@ -126,6 +124,15 @@ export class EdgelessNoteSeniorButton extends EdgelessToolbarToolMixin(
     }
   `;
 
+  private _noteBg$ = computed(() => {
+    return ThemeObserver.generateColorProperty(
+      this.edgeless.std.get(EditPropsStore).lastProps$.value['affine:note']
+        .background
+    );
+  });
+
+  private _states = ['childFlavour', 'childType', 'tip'] as const;
+
   override enableActiveBackground = true;
 
   override type = 'affine:note' as const;
@@ -170,34 +177,8 @@ export class EdgelessNoteSeniorButton extends EdgelessToolbarToolMixin(
     });
   }
 
-  override connectedCallback() {
-    super.connectedCallback();
-
-    const { background } = this.edgeless.service.editPropsStore.getLastProps(
-      this.type
-    );
-    this._noteBg = ThemeObserver.generateColorProperty(
-      background,
-      DEFAULT_NOTE_BACKGROUND_COLOR
-    );
-
-    this.disposables.add(
-      this.edgeless.service.editPropsStore.slots.lastPropsUpdated.on(
-        ({ type, props }) => {
-          if (type !== this.type) return;
-          if (props.background) {
-            this._noteBg = ThemeObserver.generateColorProperty(
-              props.background,
-              DEFAULT_NOTE_BACKGROUND_COLOR
-            );
-          }
-        }
-      )
-    );
-  }
-
   override render() {
-    const { theme, _noteBg } = this;
+    const { theme } = this;
 
     return html`<edgeless-toolbar-button
       class="edgeless-note-button"
@@ -208,7 +189,7 @@ export class EdgelessNoteSeniorButton extends EdgelessToolbarToolMixin(
         class="note-root"
         data-dark=${theme === 'dark'}
         @click=${this._toggleNoteMenu}
-        style="--paper-bg: ${_noteBg}"
+        style="--paper-bg: ${this._noteBg$.value}"
       >
         <div class="paper">${toShapeNotToAdapt}</div>
         <div class="edgeless-toolbar-note-icon link">${LinkIcon}</div>
@@ -217,9 +198,6 @@ export class EdgelessNoteSeniorButton extends EdgelessToolbarToolMixin(
       </div>
     </edgeless-toolbar-button>`;
   }
-
-  @state()
-  private accessor _noteBg: string = `var(${DEFAULT_NOTE_BACKGROUND_COLOR})`;
 
   // TODO: better to extract these states outside of component?
   @state()

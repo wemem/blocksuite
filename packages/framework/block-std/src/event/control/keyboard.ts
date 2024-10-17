@@ -39,9 +39,6 @@ export class KeyboardControl {
     ) {
       return false;
     }
-    if (['Control', 'Meta', 'Shift'].includes(event.key)) {
-      return false;
-    }
     return true;
   };
 
@@ -97,6 +94,9 @@ export class KeyboardControl {
       'compositionstart',
       () => {
         this.composition = true;
+      },
+      {
+        capture: true,
       }
     );
     this._dispatcher.disposables.addFromEvent(
@@ -104,6 +104,9 @@ export class KeyboardControl {
       'compositionend',
       () => {
         this.composition = false;
+      },
+      {
+        capture: true,
       }
     );
   }

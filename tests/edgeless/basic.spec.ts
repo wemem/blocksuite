@@ -1,10 +1,8 @@
-import { NOTE_WIDTH } from '@blocks/_common/consts.js';
-import { assertExists } from '@global/utils/index.js';
+import { NOTE_WIDTH } from '@blocksuite/affine-model';
+import { assertExists } from '@blocksuite/global/utils';
 import { expect } from '@playwright/test';
 
 import {
-  Shape,
-  ZOOM_BAR_RESPONSIVE_SCREEN_WIDTH,
   createShapeElement,
   decreaseZoomLevel,
   deleteAll,
@@ -16,8 +14,11 @@ import {
   multiTouchMove,
   multiTouchUp,
   optionMouseDrag,
+  Shape,
   shiftClickView,
   switchEditorMode,
+  toggleEditorReadonly,
+  ZOOM_BAR_RESPONSIVE_SCREEN_WIDTH,
   zoomByMouseWheel,
   zoomResetByKeyboard,
 } from '../utils/actions/edgeless.js';
@@ -149,6 +150,32 @@ test('zoom by pinch', async ({ page }) => {
   await assertEdgelessSelectedRect(page, zoomed);
 });
 
+test('zoom by pinch when edgeless is readonly', async ({ page }) => {
+  await enterPlaygroundRoom(page);
+  await initEmptyEdgelessState(page);
+
+  await switchEditorMode(page);
+  await zoomResetByKeyboard(page);
+  await assertZoomLevel(page, 100);
+
+  await toggleEditorReadonly(page);
+
+  const from = [
+    { x: CENTER_X - 100, y: CENTER_Y },
+    { x: CENTER_X + 100, y: CENTER_Y },
+  ];
+  const to = [
+    { x: CENTER_X - 50, y: CENTER_Y },
+    { x: CENTER_X + 50, y: CENTER_Y },
+  ];
+  await multiTouchDown(page, from);
+  await multiTouchMove(page, from, to);
+  await multiTouchUp(page, to);
+
+  await toggleEditorReadonly(page);
+  await assertZoomLevel(page, 50);
+});
+
 test('move by pan', async ({ page }) => {
   await enterPlaygroundRoom(page);
   await initEmptyEdgelessState(page);
@@ -272,13 +299,13 @@ test('shift click multi select and de-select', async ({ page }) => {
   await clickView(page, [50, 0]);
   await assertEdgelessSelectedRectModel(page, [0, 0, 100, 100]);
 
-  await shiftClickView(page, [150, 0]);
+  await shiftClickView(page, [150, 50]);
   await assertEdgelessSelectedRectModel(page, [0, 0, 200, 100]);
 
   // we will try to write text on a shape element when we dbclick it
 
   await waitNextFrame(page, 500);
-  await shiftClickView(page, [150, 95]);
+  await shiftClickView(page, [150, 50]);
   await assertEdgelessSelectedRectModel(page, [0, 0, 100, 100]);
 });
 

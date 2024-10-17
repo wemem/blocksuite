@@ -1,22 +1,13 @@
 import type { Doc } from '@blocksuite/store';
 
-import {
-  EditorHost,
-  ShadowlessElement,
-  WithDisposable,
-} from '@blocksuite/block-std';
+import { BlockStdScope, ShadowlessElement } from '@blocksuite/block-std';
 import { EdgelessEditorBlockSpecs } from '@blocksuite/blocks';
-import { noop } from '@blocksuite/global/utils';
-import { type TemplateResult, css, html, nothing } from 'lit';
-import { customElement, property } from 'lit/decorators.js';
-import { type Ref, createRef, ref } from 'lit/directives/ref.js';
+import { WithDisposable } from '@blocksuite/global/utils';
+import { css, html, nothing, type TemplateResult } from 'lit';
+import { property, state } from 'lit/decorators.js';
+import { guard } from 'lit/directives/guard.js';
 
-noop(EditorHost);
-
-@customElement('edgeless-editor')
 export class EdgelessEditor extends WithDisposable(ShadowlessElement) {
-  private _host: Ref<EditorHost> = createRef<EditorHost>();
-
   static override styles = css`
     edgeless-editor {
       font-family: var(--affine-font-family);
@@ -43,11 +34,23 @@ export class EdgelessEditor extends WithDisposable(ShadowlessElement) {
     }
   `;
 
+  get host() {
+    try {
+      return this.std.host;
+    } catch {
+      return null;
+    }
+  }
+
   override connectedCallback() {
     super.connectedCallback();
     this._disposables.add(
       this.doc.slots.rootAdded.on(() => this.requestUpdate())
     );
+    this.std = new BlockStdScope({
+      doc: this.doc,
+      extensions: this.specs,
+    });
   }
 
   override async getUpdateComplete(): Promise<boolean> {
@@ -57,21 +60,26 @@ export class EdgelessEditor extends WithDisposable(ShadowlessElement) {
   }
 
   override render() {
+    const std = this.std;
     if (!this.doc.root) return nothing;
 
     return html`
       <div class="affine-edgeless-viewport">
-        <editor-host
-          ${ref(this._host)}
-          .doc=${this.doc}
-          .specs=${this.specs}
-        ></editor-host>
+        ${guard([std], () => std.render())}
       </div>
     `;
   }
 
-  get host() {
-    return this._host.value;
+  override willUpdate(
+    changedProperties: Map<string | number | symbol, unknown>
+  ) {
+    super.willUpdate(changedProperties);
+    if (changedProperties.has('doc')) {
+      this.std = new BlockStdScope({
+        doc: this.doc,
+        extensions: this.specs,
+      });
+    }
   }
 
   @property({ attribute: false })
@@ -82,6 +90,9 @@ export class EdgelessEditor extends WithDisposable(ShadowlessElement) {
 
   @property({ attribute: false })
   accessor specs = EdgelessEditorBlockSpecs;
+
+  @state()
+  accessor std!: BlockStdScope;
 }
 
 declare global {
