@@ -211,8 +211,10 @@ export class DocCollection extends DocCollectionAddonType {
    * If the `init` parameter is passed, a `surface`, `note`, and `paragraph` block
    * will be created in the doc simultaneously.
    */
-  createDoc(options: { id?: string; query?: Query } = {}) {
-    const { id: docId = this.idGenerator(), query } = options;
+  createDoc(
+    options: { id?: string; query?: Query; meta?: Partial<DocMeta> } = {}
+  ) {
+    const { id: docId = this.idGenerator(), query, meta } = options;
     if (this._hasDoc(docId)) {
       throw new BlockSuiteError(
         ErrorCode.DocCollectionError,
@@ -225,6 +227,7 @@ export class DocCollection extends DocCollectionAddonType {
       title: '',
       createDate: Date.now(),
       tags: [],
+      ...meta,
     });
     this.slots.docCreated.emit(docId);
     return this.getDoc(docId, { query }) as Doc;

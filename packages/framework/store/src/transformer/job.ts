@@ -203,7 +203,7 @@ export class Job {
       });
       DocSnapshotSchema.parse(snapshot);
       const { meta, blocks } = snapshot;
-      const doc = this._collection.createDoc({ id: meta.id });
+      const doc = this._collection.createDoc({ id: meta.id, meta });
       doc.load();
       await this.snapshotToBlock(blocks, doc);
       this._slots.afterImport.emit({
