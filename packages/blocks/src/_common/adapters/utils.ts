@@ -2,6 +2,8 @@ import type { DeltaInsert } from '@blocksuite/inline';
 
 import { isEqual } from '@blocksuite/global/utils';
 
+export const directImageMatches = [/^https:\/\/cdnfile\.sspai\.com/];
+
 export const fetchImage = async (
   url: string,
   init?: RequestInit,
@@ -18,6 +20,9 @@ export const fetchImage = async (
       return await fetch(url, init);
     }
     if (url.startsWith(window.location.origin)) {
+      return await fetch(url, init);
+    }
+    if (directImageMatches.some(match => url.match(match))) {
       return await fetch(url, init);
     }
     return await fetch(proxy + '?url=' + encodeURIComponent(url), init)
