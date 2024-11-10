@@ -9,7 +9,8 @@
     "directory": "packages/affine/data-view"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && yarn transform",
+    "transform": "jscodeshift --run-in-band -t ../../../../../scripts/transform.cjs dist/",
     "test:unit": "nx vite:test --run --passWithNoTests",
     "test:unit:coverage": "nx vite:test --run --coverage",
     "test:e2e": "playwright test"
@@ -35,7 +36,8 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
-    "@types/sortablejs": "^1.15.8"
+    "@types/sortablejs": "^1.15.8",
+    "jscodeshift": "^17.1.1"
   },
   "exports": {
     ".": "./src/index.ts",

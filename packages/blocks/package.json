@@ -9,7 +9,8 @@
     "directory": "packages/blocks"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && yarn transform",
+    "transform": "jscodeshift --run-in-band -t ../../../../../scripts/transform.cjs dist/",
     "test:unit": "nx vite:test --run",
     "test:unit:coverage": "nx vite:test --run --coverage",
     "test:e2e": "playwright test",
@@ -106,6 +107,7 @@
   ],
   "devDependencies": {
     "@types/dompurify": "^3.0.5",
-    "@types/katex": "^0.16.7"
+    "@types/katex": "^0.16.7",
+    "jscodeshift": "^17.1.1"
   }
 }

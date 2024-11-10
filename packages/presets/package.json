@@ -9,7 +9,8 @@
     "directory": "packages/presets"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && yarn transform",
+    "transform": "jscodeshift --run-in-band -t ../../../../../scripts/transform.cjs dist/",
     "test:unit": "nx vite:test --browser.headless --run",
     "test:debug": "PWDEBUG=1 npx vitest"
   },
@@ -60,5 +61,8 @@
     "themes",
     "!src/__tests__",
     "!dist/__tests__"
-  ]
+  ],
+  "devDependencies": {
+    "jscodeshift": "^17.1.1"
+  }
 }
