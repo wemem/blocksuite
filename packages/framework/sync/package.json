@@ -9,8 +9,7 @@
     "directory": "packages/framework/sync"
   },
   "scripts": {
-    "build": "tsc && yarn transform",
-    "transform": "jscodeshift --run-in-band -t ../../../../../scripts/transform.cjs dist/",
+    "build": "tsc",
     "test:unit": "nx vite:test --run",
     "test": "yarn test:unit"
   },
@@ -47,8 +46,5 @@
     "dist",
     "!src/__tests__",
     "!dist/__tests__"
-  ],
-  "devDependencies": {
-    "jscodeshift": "^17.1.1"
-  }
+  ]
 }

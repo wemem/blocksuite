@@ -9,8 +9,7 @@
     "directory": "packages/affine/shared"
   },
   "scripts": {
-    "build": "tsc && yarn transform",
-    "transform": "jscodeshift --run-in-band -t ../../../../../scripts/transform.cjs dist/",
+    "build": "tsc",
     "test:unit": "nx vite:test --run",
     "test:unit:coverage": "nx vite:test --run --coverage",
     "test:e2e": "playwright test"
@@ -102,7 +101,6 @@
   ],
   "devDependencies": {
     "@types/lodash.clonedeep": "^4.5.9",
-    "@types/lodash.mergewith": "^4",
-    "jscodeshift": "^17.1.1"
+    "@types/lodash.mergewith": "^4"
   }
 }

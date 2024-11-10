@@ -9,8 +9,7 @@
     "directory": "packages/framework/store"
   },
   "scripts": {
-    "build": "tsc && yarn transform",
-    "transform": "jscodeshift --run-in-band -t ../../../../../scripts/transform.cjs dist/",
+    "build": "tsc",
     "test:unit": "nx vite:test --run",
     "test:unit:coverage": "nx vite:test --run --coverage",
     "test:unit:ui": "nx vite:test --ui",
@@ -41,7 +40,6 @@
   "devDependencies": {
     "@types/lodash.clonedeep": "^4.5.9",
     "@types/lodash.merge": "^4.6.9",
-    "jscodeshift": "^17.1.1",
     "lit": "^3.2.0",
     "yjs": "^13.6.18"
   },

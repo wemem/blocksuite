@@ -9,8 +9,7 @@
     "directory": "packages/affine/all"
   },
   "scripts": {
-    "build": "tsc --build --verbose && yarn transform",
-    "transform": "jscodeshift --run-in-band -t ../../../../../scripts/transform.cjs dist/",
+    "build": "tsc --build --verbose",
     "test:unit": "nx vite:test --run --passWithNoTests",
     "test:unit:coverage": "nx vite:test --run --coverage",
     "test:e2e": "playwright test"
@@ -178,8 +177,5 @@
     "dist",
     "!src/__tests__",
     "!dist/__tests__"
-  ],
-  "devDependencies": {
-    "jscodeshift": "^17.1.1"
-  }
+  ]
 }
